@@ -244,13 +244,22 @@ PYTHONPATH=src python -m decomp_clarifier.cli build-dataset
 PYTHONPATH=src python -m decomp_clarifier.cli run-baselines
 PYTHONPATH=src python -m decomp_clarifier.cli eval
 PYTHONPATH=src python -m decomp_clarifier.cli report
+
+python -m decomp_clarifier.cli generate-projects --count 5
+python -m decomp_clarifier.cli compile-projects
+python -m decomp_clarifier.cli export-ghidra
+python -m decomp_clarifier.cli build-dataset
+python -m decomp_clarifier.cli run-baselines
+python -m decomp_clarifier.cli eval
+python -m decomp_clarifier.cli report
+python -m decomp_clarifier.cli train-sft
+python -m decomp_clarifier.cli train-grpo
 ```
 
 Training commands are intentionally guarded and will fail fast on non-Windows or non-CUDA environments:
 
 ```bash
-PYTHONPATH=src python -m decomp_clarifier.cli train-sft
-PYTHONPATH=src python -m decomp_clarifier.cli train-grpo
+
 ```
 
 ## Phase Coverage

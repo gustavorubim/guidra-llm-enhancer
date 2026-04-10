@@ -147,6 +147,43 @@ def test_prompt_builder_and_project_generator(
     assert (tmp_path / "projects" / "sample_project" / "project_manifest.json").exists()
 
 
+def test_project_generator_uniquifies_duplicate_project_ids(
+    tmp_path: Path, sample_project
+) -> None:
+    generation_config = GenerationConfig.model_validate(
+        {
+            "model": {"model_id": "test-model", "fallback_models": [], "temperature": 0.2, "max_tokens": 10},
+            "generation": {"project_count": 2},
+            "validation": {
+                "min_source_files": 1,
+                "min_function_count": 3,
+                "max_source_files": 8,
+                "banned_includes": [],
+                "banned_calls": [],
+            },
+        }
+    )
+
+    class FakeClient:
+        def generate_json(self, **_: object):
+            return sample_project.model_dump(mode="python")
+
+    generator = ProjectGenerator(
+        client=FakeClient(),
+        config=generation_config,
+        prompt_template="Topics: {topics}\nWeights: {difficulty_weights}\nValidation: {validation_rules}",
+        project_root=tmp_path / "projects",
+        manifest_root=tmp_path / "manifests",
+    )
+
+    first = generator.generate_one()
+    second = generator.generate_one()
+
+    assert first.project_id == "sample_project"
+    assert second.project_id == "sample_project_v1"
+    assert (tmp_path / "projects" / "sample_project_v1" / "project_manifest.json").exists()
+
+
 def test_validate_project_rejects_banned_include(sample_project, repo_root: Path) -> None:
     bad_project = sample_project.model_copy(
         update={

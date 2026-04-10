@@ -47,10 +47,24 @@ class ProjectGenerator:
         )
         project = canonicalize_project(GeneratedProject.model_validate(payload))
         validate_project(project, self.config.validation)
-        self.write_project(project)
-        return project
+        return self.write_project(project)
 
-    def write_project(self, project: GeneratedProject) -> Path:
+    def _uniquify_project(self, project: GeneratedProject) -> GeneratedProject:
+        base_id = project.project_id
+        candidate_id = base_id
+        suffix = 1
+        while (
+            (self.project_root / candidate_id).exists()
+            or (self.manifest_root / f"{candidate_id}.json").exists()
+        ):
+            candidate_id = f"{base_id}_v{suffix}"
+            suffix += 1
+        if candidate_id == base_id:
+            return project
+        return project.model_copy(update={"project_id": candidate_id})
+
+    def write_project(self, project: GeneratedProject) -> GeneratedProject:
+        project = self._uniquify_project(project)
         destination = self.project_root / project.project_id
         destination.mkdir(parents=True, exist_ok=True)
         for file in project.files:
@@ -63,7 +77,7 @@ class ProjectGenerator:
         (self.manifest_root / f"{project.project_id}.json").write_text(
             manifest_json, encoding="utf-8"
         )
-        return manifest_path
+        return project
 
     @staticmethod
     def load_project(path: Path) -> GeneratedProject:
