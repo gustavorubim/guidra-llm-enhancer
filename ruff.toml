@@ -1,0 +1,8 @@
+target-version = "py313"
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM", "C4"]
+
+[format]
+quote-style = "double"

@@ -1,0 +1,12 @@
+[run]
+branch = true
+omit = [
+  "src/decomp_clarifier/__init__.py",
+]
+
+[report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]

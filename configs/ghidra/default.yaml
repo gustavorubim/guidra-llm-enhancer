@@ -1,0 +1,4 @@
+ghidra:
+  script_name: ExportFunctions.java
+  timeout_seconds: 300
+  output_debug_text: true

@@ -1,0 +1,41 @@
+model:
+  model_id: openai/gpt-4.1-mini
+  fallback_models:
+    - anthropic/claude-3.7-sonnet
+  temperature: 0.3
+  max_tokens: 4000
+generation:
+  project_count: 10
+  difficulty_weights:
+    easy: 0.4
+    medium: 0.45
+    hard: 0.15
+  topic_weights:
+    string parsing: 1.0
+    tokenization: 0.8
+    simple config parsing: 0.8
+    checksum / hash-like utilities: 0.6
+    finite state machines: 0.5
+    linked-list / array utilities: 0.7
+    tree traversal: 0.4
+    binary/hex/text conversion: 0.6
+    file-format-lite parsing: 0.5
+    command dispatch tables: 0.4
+    validation pipelines: 0.7
+    bit flag manipulation: 0.6
+    retry / error handling flows: 0.5
+    struct-heavy data transformations: 0.7
+    light numerical kernels: 0.4
+validation:
+  min_source_files: 1
+  min_function_count: 3
+  max_source_files: 8
+  banned_includes:
+    - winsock2.h
+    - sys/socket.h
+    - windows.h
+  banned_calls:
+    - system
+    - fork
+    - execve
+    - CreateProcessA

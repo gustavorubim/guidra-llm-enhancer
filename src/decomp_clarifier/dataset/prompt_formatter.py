@@ -1,0 +1,28 @@
+from __future__ import annotations
+
+import json
+
+from decomp_clarifier.schemas.dataset import FunctionDatasetSample
+
+
+def format_prompt(sample: FunctionDatasetSample) -> str:
+    return "\n".join(
+        [
+            "You are a binary-grounded code clarification assistant.",
+            f"Task: {sample.task_type}",
+            "",
+            "Decompiler:",
+            f"<code>\n{sample.ghidra_decompiled_code}\n</code>",
+            "",
+            "Assembly:",
+            f"<asm>\n{sample.assembly}\n</asm>",
+            "",
+            f"Strings: {json.dumps(sample.strings)}",
+            f"Imports: {json.dumps(sample.imports)}",
+            f"Callers: {json.dumps(sample.callers)}",
+            f"Callees: {json.dumps(sample.callees)}",
+            f"Semantic summary: {sample.semantic_summary}",
+            "",
+            "Return strict JSON with summary, confidence, renamings, cleaned_c.",
+        ]
+    )

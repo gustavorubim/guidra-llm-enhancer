@@ -1,0 +1,15 @@
+model:
+  base_model_id: Qwen/Qwen3.5-4B
+  loader_variant: unsloth
+training:
+  max_prompt_length: 3072
+  max_completion_length: 1024
+  generations_per_prompt: 4
+  reward_weights:
+    format: 1.0
+    cleanup: 1.5
+    naming: 1.5
+    compile: 2.0
+    behavior: 3.0
+    readability: 1.0
+    hallucination_penalty: 2.0

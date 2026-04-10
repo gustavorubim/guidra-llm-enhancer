@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=80.9.0", "wheel>=0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decomp-clarifier"
+version = "0.1.0"
+description = "Binary-grounded decompiler clarification research pipeline."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "OpenAI Codex" }]
+dependencies = [
+  "httpx>=0.28.1",
+  "pydantic>=2.11.4",
+  "PyYAML>=6.0.2",
+  "typer>=0.16.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.16.0",
+  "nox>=2025.5.1",
+  "pre-commit>=4.2.0",
+  "ruff>=0.11.8",
+  "types-PyYAML>=6.0.12.20250402",
+]
+test = [
+  "hypothesis>=6.131.0",
+  "pytest>=8.3.5",
+  "pytest-cov>=6.1.1",
+]
+eval = [
+  "jinja2>=3.1.6",
+  "matplotlib>=3.10.3",
+  "pandas>=2.2.3",
+  "polars>=1.29.0",
+]
+train-windows-cuda = [
+  "accelerate>=1.6.0",
+  "bitsandbytes>=0.45.5",
+  "datasets>=3.5.0",
+  "peft>=0.15.2",
+  "torch>=2.7.0",
+  "transformers>=4.51.0",
+  "trl>=0.17.0",
+  "unsloth>=2025.4.0",
+]
+
+[project.scripts]
+decomp-clarifier = "decomp_clarifier.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+py-modules = ["decomp_clarifier_editable_bootstrap"]
+
+[tool.setuptools.data-files]
+"" = ["decomp_clarifier_editable_bootstrap.pth"]

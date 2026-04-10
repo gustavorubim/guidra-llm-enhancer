@@ -1,0 +1,4 @@
+generation:
+  project_count: 5
+validation:
+  max_source_files: 3

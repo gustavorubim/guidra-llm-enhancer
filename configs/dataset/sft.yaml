@@ -1,0 +1,9 @@
+dataset:
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  seed: 7
+  task_mix:
+    full_clarify: 0.5
+    cleanup: 0.3
+    rename: 0.2

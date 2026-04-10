@@ -1,0 +1,10 @@
+compiler:
+  family: clang
+  executable: clang
+  c_standard: c11
+  opt_level: O0
+  warnings_as_errors: false
+  extra_flags:
+    - -Wall
+    - -Wextra
+    - -g

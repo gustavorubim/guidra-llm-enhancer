@@ -1,0 +1,25 @@
+run:
+  seed: 7
+  log_level: INFO
+  openrouter_base_url: https://openrouter.ai/api/v1
+  log_to_console: true
+paths:
+  generated_projects_dir: data/raw/generated_projects
+  manifests_dir: data/raw/manifests
+  binaries_dir: data/raw/binaries
+  ghidra_exports_dir: data/raw/ghidra_exports
+  aligned_projects_dir: data/interim/aligned_projects
+  aligned_functions_dir: data/interim/aligned_functions
+  processed_sft_dir: data/processed/sft
+  processed_rl_dir: data/processed/rl
+  processed_eval_dir: data/processed/eval
+  reports_dir: artifacts/reports
+  runs_dir: artifacts/runs
+  logs_dir: artifacts/logs
+ghidra:
+  project_dir: ghidra/project
+  script_dir: ghidra/scripts
+  install_dir: null
+  analyze_headless_path: null
+  script_name: ExportFunctions.java
+  timeout_seconds: 300
