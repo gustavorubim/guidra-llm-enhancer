@@ -21,6 +21,11 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
 
     model, tokenizer = load_model_and_tokenizer(config)
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
+    if config.training.min_train_samples is not None and len(dataset) < config.training.min_train_samples:
+        raise ValueError(
+            f"training dataset has only {len(dataset)} records; "
+            f"min_train_samples requires at least {config.training.min_train_samples}"
+        )
     dataset = dataset.map(lambda row: {"text": combine_prompt_and_response(row)})
 
     trainer = SFTTrainer(

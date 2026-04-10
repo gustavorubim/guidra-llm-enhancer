@@ -14,6 +14,7 @@ class FunctionDatasetSample(BaseModel):
     binary_format: str
     source_function_name: str
     source_code: str
+    compile_reference_source: str | None = None
     target_clean_code: str
     ghidra_function_name: str
     ghidra_decompiled_code: str
@@ -33,6 +34,18 @@ class PackedSFTRecord(BaseModel):
     task_type: str
     prompt: str
     response_json: str
+
+
+class PackedRLRecord(BaseModel):
+    sample_id: str
+    task_type: str
+    prompt: str
+    raw_code: str
+    compile_reference_source: str
+    target_clean_code: str
+    target_renamings: str
+    allowed_imports: str
+    allowed_callees: str
 
 
 class DatasetManifest(BaseModel):

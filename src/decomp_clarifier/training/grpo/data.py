@@ -15,3 +15,16 @@ def load_rl_records(path: Path) -> list[dict[str, Any]]:
 
 def prompt_from_record(record: dict[str, Any]) -> str:
     return record["prompt"]
+
+
+def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "raw_code": record.get("raw_code", ""),
+        "compile_reference_source": record.get(
+            "compile_reference_source", record.get("target_clean_code", "")
+        ),
+        "target_clean_code": record.get("target_clean_code", ""),
+        "target_renamings": record.get("target_renamings", "{}"),
+        "allowed_imports": record.get("allowed_imports", "[]"),
+        "allowed_callees": record.get("allowed_callees", "[]"),
+    }

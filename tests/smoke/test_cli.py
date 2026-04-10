@@ -223,5 +223,6 @@ def test_cli_workflow_smoke(
         temp_paths.runs_dir.glob("baseline-*/baseline_predictions.jsonl")
     )[0]
     assert baseline_predictions.exists()
+    assert (temp_paths.processed_rl_dir / "rl_records.jsonl").exists()
     report_file = sorted(temp_paths.reports_dir.glob("*.md"))[0]
     assert report_file.exists()

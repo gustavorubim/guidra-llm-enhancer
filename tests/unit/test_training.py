@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from decomp_clarifier.adapters.compiler_clang import resolve_clang_executable
+from decomp_clarifier.evaluation.behavior_eval import behavior_similarity
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
-from decomp_clarifier.training.grpo.data import load_rl_records, prompt_from_record
+from decomp_clarifier.training.grpo.data import load_rl_records, prompt_from_record, reward_fields_from_record
 from decomp_clarifier.training.grpo.rewards import (
     behavior_reward,
     cleanup_reward,
@@ -19,12 +21,13 @@ from decomp_clarifier.training.grpo.rewards import (
     readability_reward,
     weighted_reward,
 )
+from decomp_clarifier.training.grpo.train import compute_completion_reward
 from decomp_clarifier.training.grpo.verifier import verify_output
 from decomp_clarifier.training.sft.callbacks import write_training_summary
 from decomp_clarifier.training.sft.data import combine_prompt_and_response, load_sft_records
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.memory_profiles import select_memory_profile
-from decomp_clarifier.training.utils.version_lock import validate_version_lock
+from decomp_clarifier.training.utils.version_lock import collect_versions, validate_version_lock
 from decomp_clarifier.training.windows_guard import TrainingEnvironmentError, ensure_windows_cuda
 
 
@@ -38,6 +41,7 @@ def test_training_utilities_and_rewards(
     assert select_memory_profile(12) == "windows_cuda_16gb"
     assert select_memory_profile(24) == "windows_cuda_24gb"
     assert select_memory_profile(64) == "windows_cuda_48gb"
+    assert select_memory_profile(None) == "unknown"
     assert "os" in detect_hardware()
 
     monkeypatch.setattr(
@@ -52,6 +56,29 @@ def test_training_utilities_and_rewards(
     )
     versions = validate_version_lock()
     assert versions["unsloth"] == "2025.4.1"
+
+    from importlib.metadata import PackageNotFoundError
+
+    monkeypatch.setattr(
+        "decomp_clarifier.training.utils.version_lock.metadata.version",
+        lambda name: (_ for _ in ()).throw(PackageNotFoundError(name)),
+    )
+    missing = collect_versions()
+    assert missing["unsloth"] is None
+
+    with pytest.raises(RuntimeError, match="validated versions"):
+        validate_version_lock()
+
+    monkeypatch.setattr(
+        "decomp_clarifier.training.utils.version_lock.metadata.version",
+        lambda name: {
+            "unsloth": "2025.4.1",
+            "trl": "0.17.1",
+            "transformers": "4.51.1",
+            "datasets": "3.1.0",
+            "accelerate": "1.2.0",
+        }[name],
+    )
 
     summary_path = write_training_summary(tmp_path / "summary.json", {"loss": 0.1})
     assert json.loads(summary_path.read_text(encoding="utf-8"))["loss"] == 0.1
@@ -103,6 +130,148 @@ def test_training_utilities_and_rewards(
     rl_path.write_text('{"prompt":"prompt text"}\n', encoding="utf-8")
     rl_records = load_rl_records(rl_path)
     assert prompt_from_record(rl_records[0]) == "prompt text"
+    empty_fields = reward_fields_from_record({})
+    assert empty_fields["raw_code"] == ""
+    assert empty_fields["compile_reference_source"] == ""
+    assert empty_fields["target_renamings"] == "{}"
+
+    populated_fields = reward_fields_from_record(
+        {
+            "prompt": "p",
+            "raw_code": "raw",
+            "compile_reference_source": "#include <stdio.h>\nint helper(void) { return 0; }\n",
+            "target_clean_code": "int helper(void) { return 0; }",
+            "target_renamings": '{"local_10":"result"}',
+            "allowed_imports": '["printf"]',
+            "allowed_callees": '["printf"]',
+        }
+    )
+    assert populated_fields["compile_reference_source"].startswith("#include <stdio.h>")
+
+    assert behavior_similarity("int helper(void) { return 0; }", "") == 0.0
+    compile_only_reward = compute_completion_reward(
+        completion='{"summary":"ok","confidence":1.0,"renamings":{},"cleaned_c":"int helper(void){ printf(\\"hi\\\\n\\"); return 0; }"}',
+        raw_code='int helper(void){ undefined8 local_10; printf("hi\\n"); return 0; }',
+        compile_reference_source='#include <stdio.h>\nint helper(void) { return 0; }\n',
+        target_clean_code="int helper(void) { return 0; }",
+        target_renamings_json="{}",
+        allowed_imports_json='["printf"]',
+        allowed_callees_json='["printf"]',
+        weights={
+            "format": 0.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 1.0,
+            "behavior": 0.0,
+            "readability": 0.0,
+            "hallucination_penalty": 0.0,
+        },
+    )
+    assert compile_only_reward == (1.0 if resolve_clang_executable("clang") is not None else 0.0)
+
+    assert compute_completion_reward(
+        completion='{"summary":"x","confidence":0.5,"renamings":{},"cleaned_c":"int f(void){return 0;}"}',
+        raw_code="",
+        compile_reference_source="",
+        target_clean_code="",
+        target_renamings_json="not valid json",
+        allowed_imports_json="[]",
+        allowed_callees_json="[]",
+        weights={},
+    ) == 0.0
+
+
+def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:
+    from decomp_clarifier.settings import TrainingConfig
+    from decomp_clarifier.training.sft.train import run_sft_training
+
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        @staticmethod
+        def get_device_properties(_index: int):
+            return types.SimpleNamespace(name="GPU", total_memory=24 * 1024**3)
+
+        @staticmethod
+        def is_bf16_supported() -> bool:
+            return True
+
+    fake_torch = types.SimpleNamespace(
+        __version__="2.7.0", cuda=FakeCuda(), version=types.SimpleNamespace(cuda="12.4")
+    )
+
+    class FakeSmallDataset:
+        def __len__(self) -> int:
+            return 5
+
+        def map(self, _func):
+            return self
+
+    class FakeDatasetsSmall(types.SimpleNamespace):
+        @staticmethod
+        def load_dataset(_kind, data_files, split):
+            return FakeSmallDataset()
+
+    class FakeSFTTrainer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def train(self):
+            return None
+
+        def save_model(self, path):
+            Path(path).mkdir(parents=True, exist_ok=True)
+
+    fake_trl = types.SimpleNamespace(
+        SFTConfig=lambda **kwargs: types.SimpleNamespace(**kwargs),
+        SFTTrainer=FakeSFTTrainer,
+        GRPOConfig=lambda **kwargs: types.SimpleNamespace(**kwargs),
+        GRPOTrainer=FakeSFTTrainer,
+    )
+
+    monkeypatch.setattr(
+        "decomp_clarifier.training.windows_guard.platform.system", lambda: "Windows"
+    )
+    monkeypatch.setattr(
+        "decomp_clarifier.training.utils.version_lock.metadata.version",
+        lambda name: {
+            "unsloth": "2025.4.1",
+            "trl": "0.17.1",
+            "transformers": "4.51.1",
+            "datasets": "3.1.0",
+            "accelerate": "1.2.0",
+        }[name],
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(
+        sys.modules,
+        "unsloth",
+        types.SimpleNamespace(
+            FastLanguageModel=type(
+                "FL",
+                (),
+                {
+                    "from_pretrained": staticmethod(lambda *args, **kwargs: (object(), object())),
+                    "get_peft_model": staticmethod(lambda model, **kwargs: model),
+                },
+            )
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "datasets", FakeDatasetsSmall())
+    monkeypatch.setitem(sys.modules, "trl", fake_trl)
+
+    dataset_path = tmp_path / "records.jsonl"
+    dataset_path.write_text('{"prompt":"p","response_json":"r"}\n', encoding="utf-8")
+    config = TrainingConfig.model_validate(
+        {
+            "model": {"base_model_id": "Qwen/Qwen3.5-4B", "loader_variant": "unsloth"},
+            "training": {"min_train_samples": 300, "max_seq_length": 512, "batch_size": 1},
+        }
+    )
+    with pytest.raises(ValueError, match="min_train_samples"):
+        run_sft_training(dataset_path, tmp_path / "sft_out", config)
 
 
 def test_run_training_wrappers_with_fake_modules(
@@ -158,7 +327,19 @@ def test_run_training_wrappers_with_fake_modules(
             Path(path).mkdir(parents=True, exist_ok=True)
 
     class FakeGRPOTrainer(FakeSFTTrainer):
-        pass
+        def train(self):
+            reward_funcs = self.kwargs.get("reward_funcs", [])
+            if reward_funcs:
+                reward_funcs[0](
+                    ["test completion"],
+                    raw_code=["int uVar3(void){ int local_10; return local_10; }"],
+                    compile_reference_source=["int helper(void) { return 0; }"],
+                    target_clean_code=["int helper(void) { return 0; }"],
+                    target_renamings=['{"local_10":"result"}'],
+                    allowed_imports=["[]"],
+                    allowed_callees=["[]"],
+                )
+            return None
 
     fake_trl = types.SimpleNamespace(
         SFTConfig=lambda **kwargs: types.SimpleNamespace(**kwargs),
@@ -202,6 +383,7 @@ def test_run_training_wrappers_with_fake_modules(
                 "max_prompt_length": 128,
                 "max_completion_length": 64,
                 "generations_per_prompt": 2,
+                "behavior_similarity_threshold": 0.0,
             },
         }
     )

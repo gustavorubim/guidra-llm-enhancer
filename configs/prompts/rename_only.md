@@ -1,3 +1,5 @@
+[prompt_version: rename_only_v1]
+
 You are generating only a rename map from binary-grounded evidence.
 
 Return strict JSON with keys:

@@ -4,7 +4,12 @@ import json
 from pathlib import Path
 
 from decomp_clarifier.dataset.prompt_formatter import format_prompt
-from decomp_clarifier.schemas.dataset import DatasetManifest, FunctionDatasetSample, PackedSFTRecord
+from decomp_clarifier.schemas.dataset import (
+    DatasetManifest,
+    FunctionDatasetSample,
+    PackedRLRecord,
+    PackedSFTRecord,
+)
 
 
 def pack_sft_records(samples: list[FunctionDatasetSample]) -> list[PackedSFTRecord]:
@@ -22,6 +27,23 @@ def pack_sft_records(samples: list[FunctionDatasetSample]) -> list[PackedSFTReco
                 },
                 sort_keys=True,
             ),
+        )
+        for sample in samples
+    ]
+
+
+def pack_rl_records(samples: list[FunctionDatasetSample]) -> list[PackedRLRecord]:
+    return [
+        PackedRLRecord(
+            sample_id=sample.sample_id,
+            task_type=sample.task_type,
+            prompt=format_prompt(sample),
+            raw_code=sample.ghidra_decompiled_code,
+            compile_reference_source=sample.compile_reference_source or sample.source_code,
+            target_clean_code=sample.target_clean_code,
+            target_renamings=json.dumps(sample.rename_map_target, sort_keys=True),
+            allowed_imports=json.dumps(sample.imports),
+            allowed_callees=json.dumps(sample.callees),
         )
         for sample in samples
     ]

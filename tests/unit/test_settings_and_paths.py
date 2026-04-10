@@ -57,7 +57,8 @@ def test_project_paths_and_cache_roundtrip(tmp_path: Path, temp_app_config) -> N
 
 def test_load_dotenv_aliases(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".env").write_text("open_router='secret-value'\n", encoding="utf-8")
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.delenv("OPENROUTER_API_KEY")
     load_dotenv(tmp_path)
     assert os.getenv("OPENROUTER_API_KEY") == "secret-value"
 

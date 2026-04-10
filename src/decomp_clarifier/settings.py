@@ -118,6 +118,8 @@ class TrainingRunConfig(BaseModel):
     max_completion_length: int | None = None
     generations_per_prompt: int | None = None
     reward_weights: dict[str, float] = Field(default_factory=dict)
+    min_train_samples: int | None = None
+    behavior_similarity_threshold: float | None = None
 
 
 class TrainingHardwareConfig(BaseModel):

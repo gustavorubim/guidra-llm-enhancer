@@ -10,11 +10,11 @@ from decomp_clarifier.adapters.ghidra_headless import GhidraHeadlessAdapter
 from decomp_clarifier.baselines import naming_only, raw_ghidra
 from decomp_clarifier.baselines.simple_llm_cleanup import heuristic_cleanup
 from decomp_clarifier.compilation.binary_inventory import binary_format_for_host
-from decomp_clarifier.dataset.packers import pack_sft_records, write_jsonl_records
+from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
 from decomp_clarifier.dataset.splitters import split_project_ids
-from decomp_clarifier.evaluation.behavior_eval import behavior_similarity
+from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
 from decomp_clarifier.evaluation.compile_eval import compile_candidate
-from decomp_clarifier.evaluation.metrics import field_complete, placeholder_ratio
+from decomp_clarifier.evaluation.metrics import aggregate_metric, field_complete, placeholder_ratio
 from decomp_clarifier.evaluation.naming_eval import normalized_name_similarity
 from decomp_clarifier.evaluation.readability_eval import readability_improvement, score_readability
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
@@ -79,6 +79,10 @@ def test_parse_exports_align_dataset_and_export_runner(
     manifest = write_jsonl_records(tmp_path / "packed" / "sft.jsonl", records)
     assert manifest.record_count == 9
     assert set(manifest.task_counts) == {"full_clarify", "cleanup", "rename"}
+    rl_records = pack_rl_records(sample_dataset_samples)
+    assert len(rl_records) == len(sample_dataset_samples)
+    assert rl_records[0].raw_code == sample_dataset_samples[0].ghidra_decompiled_code
+    assert "#include <stdio.h>" in rl_records[0].compile_reference_source
 
     class FakeAdapter:
         def run(self, *, binary_path, output_dir, project_name):
@@ -116,10 +120,28 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     assert cleaned.cleaned_c != ""
     assert field_complete(cleaned)
     assert placeholder_ratio(sample.ghidra_decompiled_code) >= 0.0
+    assert placeholder_ratio("") == 0.0
+    assert aggregate_metric([], "readability_score") == 0.0
     assert normalized_name_similarity(sample.rename_map_target, sample.rename_map_target) == 1.0
+    assert score_readability("") == 0.0
     assert score_readability(cleaned.cleaned_c) >= 0.0
     assert readability_improvement(cleaned.cleaned_c, sample.ghidra_decompiled_code) >= -1.0
     assert behavior_similarity(sample.target_clean_code, sample.target_clean_code) == 1.0
+    assert is_behavior_improvement(
+        sample.target_clean_code,
+        sample.ghidra_decompiled_code,
+        sample.target_clean_code,
+    )
+    assert is_behavior_improvement(
+        sample.target_clean_code,
+        sample.target_clean_code,
+        sample.target_clean_code,
+    )
+    assert not is_behavior_improvement(
+        sample.ghidra_decompiled_code,
+        sample.ghidra_decompiled_code,
+        sample.target_clean_code,
+    )
     compiler_available = resolve_clang_executable("clang") is not None
     assert compile_candidate("int helper(void) { return 1; }", "int helper(void) { return 1; }") == (
         compiler_available

@@ -36,6 +36,7 @@ def build_function_dataset(
     for parsed_project in parsed_exports:
         project = projects_by_id[parsed_project.manifest.project_id]
         compile_manifest = manifests_by_id[project.project_id]
+        source_files = {file.path: file.content for file in project.files}
         intent_map = {
             item.function_name: item.intent for item in project.semantic_hints.function_intents
         }
@@ -52,6 +53,9 @@ def build_function_dataset(
                     binary_format=compile_manifest.binary_format,
                     source_function_name=aligned.source.name,
                     source_code=aligned.source.code,
+                    compile_reference_source=source_files.get(
+                        aligned.source.file_path, aligned.source.code
+                    ),
                     target_clean_code=normalize_source_for_target(aligned.source.code),
                     ghidra_function_name=aligned.ghidra.ghidra_function_name,
                     ghidra_decompiled_code=aligned.ghidra.decompiled_text,

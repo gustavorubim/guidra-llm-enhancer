@@ -1,3 +1,5 @@
+[prompt_version: project_generation_v1]
+
 You are generating a compact, readable C project for a binary-grounded decompiler clarification dataset.
 
 Return strict JSON that matches the repository schema.

@@ -3,12 +3,57 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
+from decomp_clarifier.evaluation.compile_eval import compile_candidate
 from decomp_clarifier.settings import TrainingConfig
-from decomp_clarifier.training.grpo.data import prompt_from_record
+from decomp_clarifier.training.grpo.data import prompt_from_record, reward_fields_from_record
+from decomp_clarifier.training.grpo.rewards import weighted_reward
+from decomp_clarifier.training.grpo.rollout import normalize_completion
 from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
 from decomp_clarifier.training.windows_guard import ensure_windows_cuda
+
+_BEHAVIOR_THRESHOLD = 0.35
+
+
+def compute_completion_reward(
+    completion: str,
+    raw_code: str,
+    compile_reference_source: str,
+    target_clean_code: str,
+    target_renamings_json: str,
+    allowed_imports_json: str,
+    allowed_callees_json: str,
+    weights: dict[str, float],
+    behavior_threshold: float = _BEHAVIOR_THRESHOLD,
+) -> float:
+    try:
+        output = normalize_completion(completion)
+        renamings: dict[str, str] = json.loads(target_renamings_json)
+        imports: list[str] = json.loads(allowed_imports_json)
+        callees: list[str] = json.loads(allowed_callees_json)
+        compile_success = compile_candidate(
+            output.cleaned_c, compile_reference_source or target_clean_code
+        )
+        behavior_score = behavior_similarity(output.cleaned_c, target_clean_code)
+        behavior_success = behavior_score >= behavior_threshold and is_behavior_improvement(
+            output.cleaned_c,
+            raw_code,
+            target_clean_code,
+        )
+        return weighted_reward(
+            output=output,
+            raw_code=raw_code,
+            target_renamings=renamings,
+            compile_success=compile_success,
+            behavior_success=behavior_success,
+            allowed_imports=imports,
+            allowed_callees=callees,
+            weights=weights,
+        )
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 
 def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
@@ -21,10 +66,49 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
 
     model, tokenizer = load_model_and_tokenizer(config)
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
-    dataset = dataset.map(lambda row: {"prompt": prompt_from_record(row)})
+    dataset = dataset.map(
+        lambda row: {"prompt": prompt_from_record(row), **reward_fields_from_record(row)}
+    )
 
-    def reward_func(completions: list[str], **_: object) -> list[float]:
-        return [0.0 for _completion in completions]
+    weights = config.training.reward_weights
+    behavior_threshold = (
+        config.training.behavior_similarity_threshold
+        if config.training.behavior_similarity_threshold is not None
+        else _BEHAVIOR_THRESHOLD
+    )
+
+    def reward_func(
+        completions: list[str],
+        *,
+        raw_code: list[str] | None = None,
+        compile_reference_source: list[str] | None = None,
+        target_clean_code: list[str] | None = None,
+        target_renamings: list[str] | None = None,
+        allowed_imports: list[str] | None = None,
+        allowed_callees: list[str] | None = None,
+        **_: object,
+    ) -> list[float]:
+        n = len(completions)
+        raw_codes = raw_code or [""] * n
+        compile_sources = compile_reference_source or [""] * n
+        target_codes = target_clean_code or [""] * n
+        renaming_maps = target_renamings or ["{}"] * n
+        import_lists = allowed_imports or ["[]"] * n
+        callee_lists = allowed_callees or ["[]"] * n
+        return [
+            compute_completion_reward(
+                completion=completion,
+                raw_code=raw_codes[index % len(raw_codes)],
+                compile_reference_source=compile_sources[index % len(compile_sources)],
+                target_clean_code=target_codes[index % len(target_codes)],
+                target_renamings_json=renaming_maps[index % len(renaming_maps)],
+                allowed_imports_json=import_lists[index % len(import_lists)],
+                allowed_callees_json=callee_lists[index % len(callee_lists)],
+                weights=weights,
+                behavior_threshold=behavior_threshold,
+            )
+            for index, completion in enumerate(completions)
+        ]
 
     trainer = GRPOTrainer(
         model=model,

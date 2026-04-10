@@ -15,3 +15,14 @@ def behavior_similarity(candidate_code: str, reference_code: str) -> float:
     overlap = len(candidate_tokens & reference_tokens)
     union = len(candidate_tokens | reference_tokens)
     return overlap / union if union else 0.0
+
+
+def is_behavior_improvement(
+    candidate_code: str,
+    raw_code: str,
+    reference_code: str,
+) -> bool:
+    sim_to_ref = behavior_similarity(candidate_code, reference_code)
+    sim_to_raw = behavior_similarity(candidate_code, raw_code)
+    # Treat ties as non-regressions because the token-overlap proxy is weak.
+    return sim_to_ref >= sim_to_raw

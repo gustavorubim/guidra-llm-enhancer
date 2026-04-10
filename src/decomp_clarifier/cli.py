@@ -18,7 +18,7 @@ from decomp_clarifier.baselines import naming_only, raw_ghidra
 from decomp_clarifier.baselines.simple_llm_cleanup import PromptOnlyCleanupBaseline
 from decomp_clarifier.compilation.build_runner import BuildRunner
 from decomp_clarifier.dataset.builders import build_function_dataset
-from decomp_clarifier.dataset.packers import pack_sft_records, write_jsonl_records
+from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
 from decomp_clarifier.evaluation.metrics import placeholder_ratio
 from decomp_clarifier.evaluation.readability_eval import score_readability
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
@@ -314,7 +314,19 @@ def build_dataset(
     )
     records = pack_sft_records(samples)
     manifest = write_jsonl_records(paths.processed_sft_dir / "sft_records.jsonl", records)
-    metrics = {"run_id": run_id, "samples": len(samples), "packed": manifest.record_count}
+    rl_records = pack_rl_records(samples)
+    rl_path = paths.processed_rl_dir / "rl_records.jsonl"
+    rl_path.parent.mkdir(parents=True, exist_ok=True)
+    rl_path.write_text(
+        "\n".join(record.model_dump_json() for record in rl_records) + ("\n" if rl_records else ""),
+        encoding="utf-8",
+    )
+    metrics = {
+        "run_id": run_id,
+        "samples": len(samples),
+        "packed": manifest.record_count,
+        "rl_packed": len(rl_records),
+    }
     (run_dir / "metrics.json").write_text(
         json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8"
     )
@@ -492,7 +504,7 @@ def train_grpo(
         },
     )
     manifest = run_grpo_training(
-        paths.processed_sft_dir / "sft_records.jsonl", run_dir / "model", training_config
+        paths.processed_rl_dir / "rl_records.jsonl", run_dir / "model", training_config
     )
     typer.echo(str(manifest))
 
