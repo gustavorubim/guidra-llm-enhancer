@@ -222,17 +222,34 @@ mindmap
 ```bash
 ./scripts/bootstrap.sh
 source .venv/bin/activate
+python -m decomp_clarifier.cli doctor
 PYTHONPATH=src python -m decomp_clarifier.cli --help
 ```
 
 ### Windows / PowerShell
 
+Core pipeline only:
+
 ```powershell
 ./scripts/bootstrap.ps1
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = (Resolve-Path .\src).Path
+python -m decomp_clarifier.cli doctor
 python -m decomp_clarifier.cli --help
 ```
+
+Windows CUDA training:
+
+```powershell
+./scripts/bootstrap.ps1 -Training
+.\.venv\Scripts\Activate.ps1
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+.\scripts\verify_train_env.ps1
+python -m decomp_clarifier.cli train-sft --help
+python -m decomp_clarifier.cli train-grpo --help
+```
+
+Use [pipeline_run.md](pipeline_run.md) for the full manual end-to-end runbook and verification checklist.
 
 ## Common Commands
 
@@ -244,6 +261,8 @@ PYTHONPATH=src python -m decomp_clarifier.cli build-dataset
 PYTHONPATH=src python -m decomp_clarifier.cli run-baselines
 PYTHONPATH=src python -m decomp_clarifier.cli eval
 PYTHONPATH=src python -m decomp_clarifier.cli report
+PYTHONPATH=src python -m decomp_clarifier.cli doctor
+PYTHONPATH=src python -m decomp_clarifier.cli doctor --training
 
 python -m decomp_clarifier.cli generate-projects --count 5
 python -m decomp_clarifier.cli compile-projects
@@ -252,15 +271,13 @@ python -m decomp_clarifier.cli build-dataset
 python -m decomp_clarifier.cli run-baselines
 python -m decomp_clarifier.cli eval
 python -m decomp_clarifier.cli report
+python -m decomp_clarifier.cli doctor
+python -m decomp_clarifier.cli doctor --training
 python -m decomp_clarifier.cli train-sft
 python -m decomp_clarifier.cli train-grpo
 ```
 
-Training commands are intentionally guarded and will fail fast on non-Windows or non-CUDA environments:
-
-```bash
-
-```
+Training commands are intentionally guarded and will fail fast on unsupported environments. On Windows CUDA hosts, `doctor --training` validates the stack before you start a long run.
 
 ## Phase Coverage
 
@@ -285,6 +302,8 @@ The included [run_headless_analysis.command](run_headless_analysis.command) refl
 - `configs/ghidra/default.yaml`
 
 On Windows, the compiler adapter also probes common LLVM installs under `C:\Program Files\LLVM\bin` and Visual Studio's `VC\Tools\Llvm\...\bin` directories before failing.
+
+After setting compiler or Ghidra paths, rerun `python -m decomp_clarifier.cli doctor` to verify discovery.
 
 ## Testing
 

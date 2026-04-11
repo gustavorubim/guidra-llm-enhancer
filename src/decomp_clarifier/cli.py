@@ -10,8 +10,8 @@ from typing import Any
 import typer
 import yaml
 
-from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 from decomp_clarifier.adapters.compiler_clang import ClangCompiler
+from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 from decomp_clarifier.adapters.ghidra_headless import GhidraHeadlessAdapter
 from decomp_clarifier.adapters.openrouter_client import OpenRouterClient
 from decomp_clarifier.baselines import naming_only, raw_ghidra
@@ -19,6 +19,7 @@ from decomp_clarifier.baselines.simple_llm_cleanup import PromptOnlyCleanupBasel
 from decomp_clarifier.compilation.build_runner import BuildRunner
 from decomp_clarifier.dataset.builders import build_function_dataset
 from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
+from decomp_clarifier.doctor import build_doctor_report, doctor_exit_code, render_doctor_report
 from decomp_clarifier.evaluation.metrics import placeholder_ratio
 from decomp_clarifier.evaluation.readability_eval import score_readability
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
@@ -51,8 +52,6 @@ from decomp_clarifier.settings import (
     load_ghidra_config,
     load_training_config,
 )
-from decomp_clarifier.training.grpo.train import run_grpo_training
-from decomp_clarifier.training.sft.train import run_sft_training
 
 app = typer.Typer(help="Binary-grounded decompiler clarification pipeline.")
 
@@ -134,6 +133,38 @@ def _quarantine_project(paths: ProjectPaths, project_id: str) -> None:
         if binary_quarantine.exists():
             shutil.rmtree(binary_quarantine)
         shutil.move(str(binary_dir), str(binary_quarantine))
+
+
+def _run_sft_training(*args: Any, **kwargs: Any) -> Path:
+    from decomp_clarifier.training.sft.train import run_sft_training
+
+    return run_sft_training(*args, **kwargs)
+
+
+def _run_grpo_training(*args: Any, **kwargs: Any) -> Path:
+    from decomp_clarifier.training.grpo.train import run_grpo_training
+
+    return run_grpo_training(*args, **kwargs)
+
+
+@app.command("doctor")
+def doctor(
+    training: bool = typer.Option(
+        False, "--training", help="Include Windows CUDA training dependency checks."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
+    app_profile: str = typer.Option("default"),
+) -> None:
+    root = ProjectPaths.discover()
+    load_dotenv(root)
+    app_config = load_app_config(root, name=app_profile)
+    paths = ProjectPaths.from_config(root, app_config)
+    report = build_doctor_report(paths, include_training=training)
+    if json_output:
+        typer.echo(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        typer.echo(render_doctor_report(report, include_training=training))
+    raise typer.Exit(code=doctor_exit_code(report, include_training=training))
 
 
 @app.command("generate-projects")
@@ -481,7 +512,7 @@ def train_sft(
             "training": training_config.model_dump(mode="python"),
         },
     )
-    manifest = run_sft_training(
+    manifest = _run_sft_training(
         paths.processed_sft_dir / "sft_records.jsonl", run_dir / "model", training_config
     )
     typer.echo(str(manifest))
@@ -503,7 +534,7 @@ def train_grpo(
             "training": training_config.model_dump(mode="python"),
         },
     )
-    manifest = run_grpo_training(
+    manifest = _run_grpo_training(
         paths.processed_rl_dir / "rl_records.jsonl", run_dir / "model", training_config
     )
     typer.echo(str(manifest))

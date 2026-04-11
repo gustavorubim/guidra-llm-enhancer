@@ -48,7 +48,7 @@ def _validated_training_versions() -> dict[str, str]:
         "transformers": "5.5.0",
         "datasets": "4.3.0",
         "accelerate": "1.13.0",
-        "tensorboard": "2.19.0",
+        "tensorboard": "2.20.0",
         "matplotlib": "3.10.3",
     }
 

@@ -12,6 +12,7 @@ def test_cli_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "generate-projects" in result.stdout
+    assert "doctor" in result.stdout
 
 
 def test_cli_workflow_smoke(
@@ -191,13 +192,75 @@ def test_cli_workflow_smoke(
     )
     monkeypatch.setattr(
         cli_module,
-        "run_sft_training",
+        "_run_sft_training",
         lambda dataset_path, output_dir, config: output_dir / "sft_manifest.json",
     )
     monkeypatch.setattr(
         cli_module,
-        "run_grpo_training",
+        "_run_grpo_training",
         lambda dataset_path, output_dir, config: output_dir / "grpo_manifest.json",
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "build_doctor_report",
+        lambda paths, include_training=False: {
+            "python": {
+                "ok": True,
+                "version": "3.13.0",
+                "executable": "python.exe",
+                "venv_active": True,
+            },
+            "compiler": {"ok": True, "requested": "clang", "resolved": "clang.exe"},
+            "ghidra": {"ok": True, "path": "ghidra/support/analyzeHeadless.bat"},
+            "openrouter": {"ok": False, "api_key_present": False},
+            **(
+                {
+                    "training": {
+                        "ok": True,
+                        "windows_cuda_guard": {"ok": True},
+                        "version_lock": {"ok": True},
+                        "hardware": {
+                            "cuda_available": True,
+                            "torch_version": "2.10.0+cu128",
+                            "cuda_version": "12.8",
+                            "gpu_name": "RTX 4070",
+                        },
+                        "unsloth_import": {
+                            "ok": True,
+                            "stdout_tail": "FastLanguageModel",
+                            "stderr_tail": None,
+                        },
+                        "xformers_import": {
+                            "ok": True,
+                            "stdout_tail": "0.0.35",
+                            "stderr_tail": None,
+                        },
+                        "bitsandbytes_import": {
+                            "ok": True,
+                            "stdout_tail": "0.49.2",
+                            "stderr_tail": None,
+                        },
+                        "tensorboard_import": {
+                            "ok": True,
+                            "stdout_tail": "2.20.0",
+                            "stderr_tail": None,
+                        },
+                    }
+                }
+                if include_training
+                else {}
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "render_doctor_report",
+        lambda report, include_training=False: "doctor ok",
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "doctor_exit_code",
+        lambda report, include_training=False: 0,
     )
 
     dataset_file = temp_paths.processed_sft_dir / "function_dataset.jsonl"
@@ -208,6 +271,8 @@ def test_cli_workflow_smoke(
     )
 
     runner = CliRunner()
+    assert runner.invoke(app, ["doctor"]).exit_code == 0
+    assert runner.invoke(app, ["doctor", "--training"]).exit_code == 0
     assert runner.invoke(app, ["generate-projects"]).exit_code == 0
     assert runner.invoke(app, ["compile-projects"]).exit_code == 0
     assert runner.invoke(app, ["export-ghidra"]).exit_code == 0

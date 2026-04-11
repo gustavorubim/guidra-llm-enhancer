@@ -8,7 +8,7 @@ VALIDATED_VERSIONS = {
     "transformers": "5.",
     "datasets": "4.",
     "accelerate": "1.",
-    "tensorboard": "2.19.",
+    "tensorboard": "2.20.",
     "matplotlib": "3.10.",
 }
 

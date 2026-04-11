@@ -52,6 +52,17 @@ def test_ghidra_adapter_builds_command(tmp_path: Path, temp_app_config, monkeypa
     assert result.returncode == 0
 
 
+def test_ghidra_adapter_windows_default_path(tmp_path: Path, temp_app_config, monkeypatch) -> None:
+    monkeypatch.delenv("DECOMP_CLARIFIER_GHIDRA_ANALYZE_HEADLESS", raising=False)
+    monkeypatch.delenv("DECOMP_CLARIFIER_GHIDRA_DIR", raising=False)
+    monkeypatch.setattr("decomp_clarifier.adapters.ghidra_headless.os.name", "nt")
+    monkeypatch.setattr("decomp_clarifier.adapters.ghidra_headless.Path.home", lambda: tmp_path)
+
+    adapter = GhidraHeadlessAdapter(temp_app_config.ghidra, root=tmp_path)
+
+    assert adapter.analyze_headless_path().name == "analyzeHeadless.bat"
+
+
 def test_parse_exports_align_dataset_and_export_runner(
     tmp_path: Path,
     sample_project,
@@ -143,8 +154,9 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
         sample.target_clean_code,
     )
     compiler_available = resolve_clang_executable("clang") is not None
-    assert compile_candidate("int helper(void) { return 1; }", "int helper(void) { return 1; }") == (
-        compiler_available
+    assert (
+        compile_candidate("int helper(void) { return 1; }", "int helper(void) { return 1; }")
+        == compiler_available
     )
 
     output = normalize_output(

@@ -24,8 +24,9 @@ class GhidraHeadlessAdapter:
             suffix = "analyzeHeadless.bat" if os.name == "nt" else "analyzeHeadless"
             return Path(install_dir).expanduser() / "support" / suffix
 
+        default_name = "analyzeHeadless.bat" if os.name == "nt" else "analyzeHeadless"
         default_candidate = (
-            Path.home() / "Downloads" / "ghidra_12.0.4_PUBLIC" / "support" / "analyzeHeadless"
+            Path.home() / "Downloads" / "ghidra_12.0.4_PUBLIC" / "support" / default_name
         )
         return default_candidate
 
