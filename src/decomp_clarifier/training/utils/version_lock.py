@@ -8,6 +8,8 @@ VALIDATED_VERSIONS = {
     "transformers": "5.",
     "datasets": "4.",
     "accelerate": "1.",
+    "tensorboard": "2.19.",
+    "matplotlib": "3.10.",
 }
 
 

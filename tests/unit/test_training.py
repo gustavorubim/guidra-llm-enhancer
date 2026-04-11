@@ -41,6 +41,18 @@ from decomp_clarifier.training.utils.version_lock import collect_versions, valid
 from decomp_clarifier.training.windows_guard import TrainingEnvironmentError, ensure_windows_cuda
 
 
+def _validated_training_versions() -> dict[str, str]:
+    return {
+        "unsloth": "2026.4.1",
+        "trl": "0.24.0",
+        "transformers": "5.5.0",
+        "datasets": "4.3.0",
+        "accelerate": "1.13.0",
+        "tensorboard": "2.19.0",
+        "matplotlib": "3.10.3",
+    }
+
+
 def test_training_utilities_and_rewards(
     monkeypatch, tmp_path: Path, sample_dataset_samples
 ) -> None:
@@ -56,13 +68,7 @@ def test_training_utilities_and_rewards(
 
     monkeypatch.setattr(
         "decomp_clarifier.training.utils.version_lock.metadata.version",
-        lambda name: {
-            "unsloth": "2026.4.1",
-            "trl": "0.24.0",
-            "transformers": "5.5.0",
-            "datasets": "4.3.0",
-            "accelerate": "1.13.0",
-        }[name],
+        lambda name: _validated_training_versions()[name],
     )
     versions = validate_version_lock()
     assert versions["unsloth"] == "2026.4.1"
@@ -81,13 +87,7 @@ def test_training_utilities_and_rewards(
 
     monkeypatch.setattr(
         "decomp_clarifier.training.utils.version_lock.metadata.version",
-        lambda name: {
-            "unsloth": "2026.4.1",
-            "trl": "0.24.0",
-            "transformers": "5.5.0",
-            "datasets": "4.3.0",
-            "accelerate": "1.13.0",
-        }[name],
+        lambda name: _validated_training_versions()[name],
     )
 
     summary_path = write_training_summary(tmp_path / "summary.json", {"loss": 0.1})
@@ -227,8 +227,16 @@ def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:
     class FakeSFTTrainer:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
+            self.state = types.SimpleNamespace(global_step=0, epoch=0.0, log_history=[])
 
         def train(self):
+            callbacks = self.kwargs.get("callbacks", [])
+            self.state.global_step = 1
+            self.state.epoch = 1.0
+            log_row = {"loss": 0.75, "learning_rate": 2e-4}
+            self.state.log_history.append({"step": 1, "epoch": 1.0, **log_row})
+            for callback in callbacks:
+                callback.on_log(None, self.state, None, logs=log_row)
             return None
 
         def save_model(self, path):
@@ -246,13 +254,7 @@ def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:
     )
     monkeypatch.setattr(
         "decomp_clarifier.training.utils.version_lock.metadata.version",
-        lambda name: {
-            "unsloth": "2026.4.1",
-            "trl": "0.24.0",
-            "transformers": "5.5.0",
-            "datasets": "4.3.0",
-            "accelerate": "1.13.0",
-        }[name],
+        lambda name: _validated_training_versions()[name],
     )
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(
@@ -329,9 +331,17 @@ def test_run_training_wrappers_with_fake_modules(
     class FakeSFTTrainer:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
+            self.state = types.SimpleNamespace(global_step=0, epoch=0.0, log_history=[])
 
         def train(self):
-            return None
+            callbacks = self.kwargs.get("callbacks", [])
+            self.state.global_step = 1
+            self.state.epoch = 0.5
+            log_row = {"loss": 0.42, "learning_rate": 2e-4}
+            self.state.log_history.append({"step": 1, "epoch": 0.5, **log_row})
+            for callback in callbacks:
+                callback.on_log(None, self.state, None, logs=log_row)
+            return types.SimpleNamespace(metrics={"train_loss": 0.42})
 
         def save_model(self, path):
             Path(path).mkdir(parents=True, exist_ok=True)
@@ -349,7 +359,14 @@ def test_run_training_wrappers_with_fake_modules(
                     allowed_imports=["[]"],
                     allowed_callees=["[]"],
                 )
-            return None
+            callbacks = self.kwargs.get("callbacks", [])
+            self.state.global_step = 2
+            self.state.epoch = 1.0
+            log_row = {"reward": 0.9, "kl": 0.05}
+            self.state.log_history.append({"step": 2, "epoch": 1.0, **log_row})
+            for callback in callbacks:
+                callback.on_log(None, self.state, None, logs=log_row)
+            return types.SimpleNamespace(metrics={"reward": 0.9})
 
     fake_trl = types.SimpleNamespace(
         SFTConfig=lambda **kwargs: types.SimpleNamespace(**kwargs),
@@ -363,13 +380,7 @@ def test_run_training_wrappers_with_fake_modules(
     )
     monkeypatch.setattr(
         "decomp_clarifier.training.utils.version_lock.metadata.version",
-        lambda name: {
-            "unsloth": "2026.4.1",
-            "trl": "0.24.0",
-            "transformers": "5.5.0",
-            "datasets": "4.3.0",
-            "accelerate": "1.13.0",
-        }[name],
+        lambda name: _validated_training_versions()[name],
     )
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(
@@ -401,3 +412,24 @@ def test_run_training_wrappers_with_fake_modules(
     grpo_manifest = run_grpo_training(dataset_path, tmp_path / "grpo", config)
     assert sft_manifest.exists()
     assert grpo_manifest.exists()
+
+    sft_payload = json.loads(sft_manifest.read_text(encoding="utf-8"))
+    grpo_payload = json.loads(grpo_manifest.read_text(encoding="utf-8"))
+
+    for payload, stage, plot_name in (
+        (sft_payload, "sft", "loss"),
+        (grpo_payload, "grpo", "reward"),
+    ):
+        telemetry = payload["telemetry"]
+        assert telemetry["row_count"] >= 1
+        assert Path(telemetry["metrics_jsonl"]).exists()
+        assert Path(telemetry["metrics_csv"]).exists()
+        assert Path(telemetry["tensorboard_dir"]).exists()
+        assert Path(telemetry["plots"][plot_name]["path"]).exists()
+        summary_path = tmp_path / stage / "logs" / f"{stage}_summary.json"
+        assert summary_path.exists()
+
+    sft_jsonl = (tmp_path / "sft" / "logs" / "sft_metrics.jsonl").read_text(encoding="utf-8")
+    grpo_jsonl = (tmp_path / "grpo" / "logs" / "grpo_metrics.jsonl").read_text(encoding="utf-8")
+    assert "loss" in sft_jsonl
+    assert "reward_mean" in grpo_jsonl

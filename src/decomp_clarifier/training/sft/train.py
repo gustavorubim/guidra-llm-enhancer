@@ -7,6 +7,10 @@ from decomp_clarifier.settings import TrainingConfig
 from decomp_clarifier.training.sft.data import combine_prompt_and_response
 from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 from decomp_clarifier.training.utils.hardware import detect_hardware
+from decomp_clarifier.training.utils.telemetry import (
+    TrainingTelemetry,
+    TrainingTelemetryCallback,
+)
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
 from decomp_clarifier.training.windows_guard import ensure_windows_cuda
 
@@ -15,6 +19,7 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
     ensure_windows_cuda()
     versions = validate_version_lock()
     hardware = detect_hardware()
+    telemetry = TrainingTelemetry("sft", output_dir)
 
     import unsloth  # noqa: F401 - must be imported before trl/transformers  # type: ignore[import-not-found]
     from datasets import load_dataset  # type: ignore[import-not-found]
@@ -37,6 +42,8 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
         train_dataset=dataset,
         args=SFTConfig(
             output_dir=str(output_dir),
+            logging_dir=str(telemetry.tensorboard_dir),
+            logging_first_step=True,
             max_length=max_length,
             per_device_train_batch_size=config.training.batch_size or 1,
             gradient_accumulation_steps=config.training.grad_accum_steps or 1,
@@ -44,15 +51,27 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
             max_steps=max_steps,
             learning_rate=2e-4,
             logging_steps=1,
+            logging_strategy="steps",
+            report_to=["tensorboard"],
         ),
         dataset_text_field="text",
+        callbacks=[TrainingTelemetryCallback(telemetry)],
     )
-    trainer.train()
+    train_result = trainer.train()
     trainer.save_model(str(output_dir))
+    telemetry_summary = telemetry.finalize(
+        trainer=trainer,
+        final_metrics=getattr(train_result, "metrics", None),
+    )
     manifest_path = output_dir / "sft_training_manifest.json"
     manifest_path.write_text(
         json.dumps(
-            {"versions": versions, "hardware": hardware, "dataset": str(dataset_path)},
+            {
+                "versions": versions,
+                "hardware": hardware,
+                "dataset": str(dataset_path),
+                "telemetry": telemetry_summary,
+            },
             indent=2,
             sort_keys=True,
         ),

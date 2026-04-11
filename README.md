@@ -17,7 +17,7 @@ Implemented vs validated:
 
 - Phases `0` through `4` are implemented and validated on macOS.
 - Phase `5` SFT is implemented as a guarded Windows CUDA path, but it has not been run end-to-end on this macOS machine.
-- Phase `6` GRPO is implemented as a guarded Windows CUDA scaffold, but it has not been run end-to-end on this macOS machine and its trainer reward hook is not fully wired into the verifier stack yet.
+- Phase `6` GRPO is implemented as a guarded Windows CUDA path, but it has not been run end-to-end on this macOS machine.
 
 ## Repo Architecture
 
@@ -129,8 +129,8 @@ Default GRPO weights from `configs/training/grpo_qwen35_4b.yaml`:
 
 Important status note:
 
-- The reward modules and verifier helpers exist, but the current GRPO trainer path still uses a placeholder reward callback. The intended composition is implemented in `training/grpo/rewards.py`; the final trainer wiring is still partial.
 - The current `compile` and `behavior` checks are conservative proxies, not full recompilation and differential execution against the original binary yet.
+- Both training entry points now emit per-step JSONL/CSV logs, TensorBoard event logs, and PNG telemetry plots under each run's `model/` directory.
 
 ## Training Curriculum
 
@@ -154,7 +154,8 @@ Current training stages:
 2. `pack_sft_records()` turns each row into a binary-grounded prompt plus a strict JSON target containing `summary`, `confidence`, `renamings`, and `cleaned_c`.
 3. `train-sft` concatenates `prompt` and `response_json` into a single training text sample and runs `SFTTrainer` on the Windows CUDA path.
 4. The intended next gate is to compare the SFT checkpoint against raw and prompt-only baselines before starting RL.
-5. `train-grpo` currently reuses the packed records, extracts the prompt field, generates multiple completions per prompt, and is intended to score them with the weighted reward stack above.
+5. `train-grpo` reuses the packed records, extracts the prompt field, generates multiple completions per prompt, and scores them with the weighted reward stack above.
+6. `train-sft` writes loss telemetry, and `train-grpo` writes reward telemetry, as JSONL/CSV logs plus TensorBoard and PNG artifacts.
 
 Current SFT defaults in `configs/training/sft_qwen35_4b.yaml`:
 
@@ -176,7 +177,6 @@ What is not wired yet:
 - no automatic difficulty curriculum that ramps from easy to hard samples
 - no staged sampler that uses the dataset `difficulty` field
 - no CLI gate that automatically promotes a checkpoint from SFT to GRPO based on eval thresholds
-- no fully integrated verifier-backed GRPO reward loop in the trainer yet
 
 ## Repository Layout
 
@@ -272,7 +272,7 @@ Training commands are intentionally guarded and will fail fast on non-Windows or
 | 3. Dataset builder | Implemented and validated | Function-level rows, split logic, SFT packing |
 | 4. Baselines + reporting | Implemented and validated | Raw, naming-only, prompt-only cleanup, report generation |
 | 5. SFT | Implemented, not runtime-validated here | Guarded Windows CUDA path using Unsloth + TRL |
-| 6. GRPO | Implemented scaffold, not runtime-validated here | Guarded Windows CUDA path; reward/verifier modules exist, but trainer integration is still partial |
+| 6. GRPO | Implemented, not runtime-validated here | Guarded Windows CUDA path with weighted reward logging and telemetry artifacts |
 | 7. Demo CLI | Implemented and validated | `demo`, `eval`, and `report` run on macOS |
 
 ## Ghidra

@@ -24,7 +24,15 @@ def detect_hardware() -> dict[str, Any]:
         hardware["gpu_vram_gb"] = round(properties.total_memory / (1024**3), 2)
         hardware["cuda_version"] = getattr(torch.version, "cuda", None)
         hardware["bf16_supported"] = bool(torch.cuda.is_bf16_supported())
-    for package in ("unsloth", "trl", "transformers", "datasets", "accelerate"):
+    for package in (
+        "unsloth",
+        "trl",
+        "transformers",
+        "datasets",
+        "accelerate",
+        "tensorboard",
+        "matplotlib",
+    ):
         try:
             hardware[f"{package}_version"] = metadata.version(package)
         except metadata.PackageNotFoundError:

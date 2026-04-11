@@ -11,6 +11,11 @@ from decomp_clarifier.training.grpo.rewards import weighted_reward
 from decomp_clarifier.training.grpo.rollout import normalize_completion
 from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 from decomp_clarifier.training.utils.hardware import detect_hardware
+from decomp_clarifier.training.utils.telemetry import (
+    TrainingTelemetry,
+    TrainingTelemetryCallback,
+    reward_log_row,
+)
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
 from decomp_clarifier.training.windows_guard import ensure_windows_cuda
 
@@ -60,6 +65,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     ensure_windows_cuda()
     versions = validate_version_lock()
     hardware = detect_hardware()
+    telemetry = TrainingTelemetry("grpo", output_dir)
 
     import unsloth  # noqa: F401 - must be imported before trl/transformers  # type: ignore[import-not-found]
     from datasets import load_dataset  # type: ignore[import-not-found]
@@ -77,6 +83,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         if config.training.behavior_similarity_threshold is not None
         else _BEHAVIOR_THRESHOLD
     )
+    reward_step = 0
 
     def reward_func(
         completions: list[str],
@@ -89,6 +96,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         allowed_callees: list[str] | None = None,
         **_: object,
     ) -> list[float]:
+        nonlocal reward_step
         n = len(completions)
         raw_codes = raw_code or [""] * n
         compile_sources = compile_reference_source or [""] * n
@@ -96,7 +104,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         renaming_maps = target_renamings or ["{}"] * n
         import_lists = allowed_imports or ["[]"] * n
         callee_lists = allowed_callees or ["[]"] * n
-        return [
+        rewards = [
             compute_completion_reward(
                 completion=completion,
                 raw_code=raw_codes[index % len(raw_codes)],
@@ -110,6 +118,14 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
             )
             for index, completion in enumerate(completions)
         ]
+        reward_step += 1
+        reward_metrics = reward_log_row(rewards, step=reward_step)
+        telemetry.record_metrics(
+            {key: value for key, value in reward_metrics.items() if key != "step"},
+            step=reward_metrics["step"],
+            source="reward_func",
+        )
+        return rewards
 
     max_steps = config.training.max_steps if config.training.max_steps is not None else -1
     trainer = GRPOTrainer(
@@ -119,18 +135,33 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         train_dataset=dataset,
         args=GRPOConfig(
             output_dir=str(output_dir),
+            logging_dir=str(telemetry.tensorboard_dir),
+            logging_first_step=True,
+            logging_steps=1,
+            logging_strategy="steps",
             max_prompt_length=config.training.max_prompt_length or 512,
             max_completion_length=config.training.max_completion_length or 256,
             num_generations=config.training.generations_per_prompt or 4,
             max_steps=max_steps,
+            report_to=["tensorboard"],
         ),
+        callbacks=[TrainingTelemetryCallback(telemetry)],
     )
-    trainer.train()
+    train_result = trainer.train()
     trainer.save_model(str(output_dir))
+    telemetry_summary = telemetry.finalize(
+        trainer=trainer,
+        final_metrics=getattr(train_result, "metrics", None),
+    )
     manifest_path = output_dir / "grpo_training_manifest.json"
     manifest_path.write_text(
         json.dumps(
-            {"versions": versions, "hardware": hardware, "dataset": str(dataset_path)},
+            {
+                "versions": versions,
+                "hardware": hardware,
+                "dataset": str(dataset_path),
+                "telemetry": telemetry_summary,
+            },
             indent=2,
             sort_keys=True,
         ),
