@@ -23,6 +23,8 @@ def format_prompt(sample: FunctionDatasetSample) -> str:
             f"Callees: {json.dumps(sample.callees)}",
             f"Semantic summary: {sample.semantic_summary}",
             "",
-            "Return strict JSON with summary, confidence, renamings, cleaned_c.",
+            "Return exactly one JSON object with keys summary, confidence, renamings, cleaned_c.",
+            "Do not include markdown fences, commentary, XML tags, or <think> blocks.",
+            "JSON:",
         ]
     )

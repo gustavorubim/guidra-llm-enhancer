@@ -41,6 +41,8 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
     from trl import SFTConfig, SFTTrainer  # type: ignore[import-not-found]
 
     model, tokenizer = load_model_and_tokenizer(config)
+    text_tokenizer = getattr(tokenizer, "tokenizer", tokenizer)
+    eos_token = getattr(text_tokenizer, "eos_token", None)
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
     dataset_size = _dataset_size(dataset)
     logger.info(
@@ -56,7 +58,9 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
             f"training dataset has only {dataset_size} records; "
             f"min_train_samples requires at least {config.training.min_train_samples}"
         )
-    dataset = dataset.map(lambda row: {"text": combine_prompt_and_response(row)})
+    dataset = dataset.map(
+        lambda row: {"text": combine_prompt_and_response(row, eos_token=eos_token)}
+    )
 
     max_length = config.training.max_seq_length or 512
     max_steps = (

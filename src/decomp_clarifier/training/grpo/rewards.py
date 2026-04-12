@@ -7,7 +7,9 @@ from decomp_clarifier.evaluation.readability_eval import readability_improvement
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 
 
-def format_reward(output: ClarifiedFunctionOutput) -> float:
+def format_reward(output: ClarifiedFunctionOutput, *, json_valid: bool = True) -> float:
+    if not json_valid:
+        return 0.0
     return 1.0 if output.summary.strip() and output.cleaned_c.strip() else 0.0
 
 
@@ -45,6 +47,8 @@ def hallucination_penalty(
     allowed_callees: list[str],
 ) -> float:
     allowed_calls = set(allowed_imports) | set(allowed_callees)
+    if not allowed_calls:
+        return 0.0
     observed_calls = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", output.cleaned_c))
     harmless = {"if", "for", "while", "switch", "return", "sizeof"}
     unsupported = [
@@ -53,9 +57,63 @@ def hallucination_penalty(
     return float(len(unsupported))
 
 
+def reward_breakdown(
+    *,
+    output: ClarifiedFunctionOutput,
+    json_valid: bool,
+    raw_code: str,
+    target_renamings: dict[str, str],
+    compile_success: bool,
+    behavior_success: bool,
+    allowed_imports: list[str],
+    allowed_callees: list[str],
+    weights: dict[str, float],
+) -> dict[str, float]:
+    if not json_valid or not output.summary.strip() or not output.cleaned_c.strip():
+        return {
+            "json_valid": 0.0 if not json_valid else 1.0,
+            "format": 0.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 0.0,
+            "behavior": 0.0,
+            "readability": 0.0,
+            "hallucination_penalty": 0.0,
+            "total": 0.0,
+        }
+    format_value = format_reward(output, json_valid=True)
+    cleanup_value = cleanup_reward(output, raw_code)
+    naming_value = naming_reward(output, target_renamings)
+    compile_value = compile_reward(compile_success)
+    behavior_value = behavior_reward(behavior_success)
+    readability_value = readability_reward(output, raw_code)
+    hallucination_value = hallucination_penalty(output, allowed_imports, allowed_callees)
+    total = (
+        weights.get("format", 1.0) * format_value
+        + weights.get("cleanup", 1.0) * cleanup_value
+        + weights.get("naming", 1.0) * naming_value
+        + weights.get("compile", 1.0) * compile_value
+        + weights.get("behavior", 1.0) * behavior_value
+        + weights.get("readability", 1.0) * readability_value
+        - weights.get("hallucination_penalty", 1.0) * hallucination_value
+    )
+    return {
+        "json_valid": 1.0,
+        "format": format_value,
+        "cleanup": cleanup_value,
+        "naming": naming_value,
+        "compile": compile_value,
+        "behavior": behavior_value,
+        "readability": readability_value,
+        "hallucination_penalty": hallucination_value,
+        "total": total,
+    }
+
+
 def weighted_reward(
     *,
     output: ClarifiedFunctionOutput,
+    json_valid: bool,
     raw_code: str,
     target_renamings: dict[str, str],
     compile_success: bool,
@@ -64,13 +122,14 @@ def weighted_reward(
     allowed_callees: list[str],
     weights: dict[str, float],
 ) -> float:
-    return (
-        weights.get("format", 1.0) * format_reward(output)
-        + weights.get("cleanup", 1.0) * cleanup_reward(output, raw_code)
-        + weights.get("naming", 1.0) * naming_reward(output, target_renamings)
-        + weights.get("compile", 1.0) * compile_reward(compile_success)
-        + weights.get("behavior", 1.0) * behavior_reward(behavior_success)
-        + weights.get("readability", 1.0) * readability_reward(output, raw_code)
-        - weights.get("hallucination_penalty", 1.0)
-        * hallucination_penalty(output, allowed_imports, allowed_callees)
-    )
+    return reward_breakdown(
+        output=output,
+        json_valid=json_valid,
+        raw_code=raw_code,
+        target_renamings=target_renamings,
+        compile_success=compile_success,
+        behavior_success=behavior_success,
+        allowed_imports=allowed_imports,
+        allowed_callees=allowed_callees,
+        weights=weights,
+    )["total"]

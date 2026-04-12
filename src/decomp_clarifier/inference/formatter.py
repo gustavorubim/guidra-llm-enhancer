@@ -6,16 +6,39 @@ from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 
 
 def extract_json_object(text: str) -> str | None:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    return text[start : end + 1]
+    start_index: int | None = None
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index, character in enumerate(text):
+        if start_index is None:
+            if character == "{":
+                start_index = index
+                depth = 1
+            continue
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start_index : index + 1]
+    return None
 
 
 def _fallback_output(text: str) -> ClarifiedFunctionOutput:
     return ClarifiedFunctionOutput(
-        summary="Model output was not valid JSON.",
+        summary="",
         confidence=0.0,
         renamings={},
         cleaned_c=text.strip(),
@@ -27,7 +50,8 @@ def normalize_output_with_status(text: str) -> tuple[ClarifiedFunctionOutput, bo
     if json_fragment is None:
         return _fallback_output(text), False
     try:
-        return ClarifiedFunctionOutput.model_validate(json.loads(json_fragment)), True
+        output = ClarifiedFunctionOutput.model_validate(json.loads(json_fragment))
+        return output, text.strip() == json_fragment.strip()
     except Exception:  # noqa: BLE001 - tolerate malformed generations during inference
         return _fallback_output(text), False
 

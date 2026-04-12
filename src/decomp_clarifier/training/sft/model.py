@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from decomp_clarifier.settings import TrainingConfig
+
+
+def _checkpoint_has_lora_adapters(model_name: str | None) -> bool:
+    if not model_name:
+        return False
+    path = Path(model_name)
+    return path.exists() and (path / "adapter_config.json").exists()
 
 
 def load_model_and_tokenizer(config: TrainingConfig) -> tuple[Any, Any]:
@@ -15,6 +23,10 @@ def load_model_and_tokenizer(config: TrainingConfig) -> tuple[Any, Any]:
         load_in_4bit=bool(config.training.load_in_4bit),
         device_map="cuda:0",
     )
+    if _checkpoint_has_lora_adapters(config.model.base_model_id) or (
+        "PeftModel" in type(model).__name__
+    ):
+        return model, tokenizer
     lora_r = config.training.lora_rank or 16
     model = FastLanguageModel.get_peft_model(
         model,

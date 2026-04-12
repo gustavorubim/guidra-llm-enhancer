@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
+from decomp_clarifier.c_source import (
+    function_name_from_signature_line,
+    looks_like_function_signature_line,
+)
 from decomp_clarifier.ghidra_export.parse_exports import ParsedGhidraProject
 from decomp_clarifier.schemas.generation import GeneratedProject
 from decomp_clarifier.schemas.ghidra import GhidraFunctionRow
-
-FUNCTION_HEADER = re.compile(
-    r"(?P<signature>\b[A-Za-z_][\w\s\*]*\b(?P<name>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{)",
-    re.MULTILINE,
-)
 
 
 @dataclass(frozen=True)
@@ -43,17 +41,47 @@ def _slice_function(content: str, start_index: int) -> str:
     return content[start_index:]
 
 
+def _iter_function_starts(content: str) -> list[tuple[int, str]]:
+    lines = content.splitlines(keepends=True)
+    offsets: list[int] = []
+    offset = 0
+    for line in lines:
+        offsets.append(offset)
+        offset += len(line)
+
+    starts: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        stripped = line.rstrip("\r\n").strip()
+        if not stripped or stripped.startswith(("#", "//", "/*", "*", "*/")):
+            continue
+        candidate = stripped
+        if not looks_like_function_signature_line(candidate) and "(" in stripped:
+            candidate_parts = [stripped]
+            for lookahead in range(index + 1, len(lines)):
+                next_part = lines[lookahead].rstrip("\r\n").strip()
+                if not next_part:
+                    break
+                candidate_parts.append(next_part)
+                candidate = " ".join(part for part in candidate_parts if part)
+                if "{" in next_part or ";" in next_part:
+                    break
+        if not looks_like_function_signature_line(candidate):
+            continue
+        name = function_name_from_signature_line(candidate)
+        if name is None:
+            continue
+        starts.append((offsets[index], name))
+    return starts
+
+
 def extract_source_functions(project: GeneratedProject) -> list[SourceFunction]:
     functions: list[SourceFunction] = []
     order = 0
     for file in project.files:
         if not file.path.endswith(".c"):
             continue
-        for match in FUNCTION_HEADER.finditer(file.content):
-            name = match.group("name")
-            if name in {"if", "for", "while", "switch"}:
-                continue
-            code = _slice_function(file.content, match.start()).strip()
+        for start_index, name in _iter_function_starts(file.content):
+            code = _slice_function(file.content, start_index).strip()
             functions.append(
                 SourceFunction(file_path=file.path, name=name, code=code, order_index=order)
             )

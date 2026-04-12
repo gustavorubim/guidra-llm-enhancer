@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from decomp_clarifier.c_source import extract_called_functions
 from decomp_clarifier.dataset.prompt_formatter import format_prompt
 from decomp_clarifier.schemas.dataset import (
     DatasetManifest,
@@ -10,6 +11,14 @@ from decomp_clarifier.schemas.dataset import (
     PackedRLRecord,
     PackedSFTRecord,
 )
+
+
+def _allowed_callees(sample: FunctionDatasetSample) -> list[str]:
+    # Ghidra import/callee recovery is sparse on some samples. Fall back to calls
+    # seen in the cleaned target so reward shaping does not punish target-valid calls.
+    return list(
+        dict.fromkeys([*sample.callees, *extract_called_functions(sample.target_clean_code)])
+    )
 
 
 def pack_sft_records(samples: list[FunctionDatasetSample]) -> list[PackedSFTRecord]:
@@ -43,7 +52,7 @@ def pack_rl_records(samples: list[FunctionDatasetSample]) -> list[PackedRLRecord
             target_clean_code=sample.target_clean_code,
             target_renamings=json.dumps(sample.rename_map_target, sort_keys=True),
             allowed_imports=json.dumps(sample.imports),
-            allowed_callees=json.dumps(sample.callees),
+            allowed_callees=json.dumps(_allowed_callees(sample)),
         )
         for sample in samples
     ]

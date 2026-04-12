@@ -23,7 +23,7 @@ from decomp_clarifier.evaluation.metrics import aggregate_metric, field_complete
 from decomp_clarifier.evaluation.naming_eval import normalized_name_similarity
 from decomp_clarifier.evaluation.readability_eval import readability_improvement, score_readability
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
-from decomp_clarifier.ghidra_export.aligner import align_functions
+from decomp_clarifier.ghidra_export.aligner import align_functions, extract_source_functions
 from decomp_clarifier.ghidra_export.export_runner import GhidraExportRunner
 from decomp_clarifier.ghidra_export.parse_exports import parse_ghidra_export_dir
 from decomp_clarifier.inference.checkpoint_predictor import _encode_prompt, _text_tokenizer
@@ -101,6 +101,7 @@ def test_parse_exports_align_dataset_and_export_runner(
     assert len(rl_records) == len(sample_dataset_samples)
     assert rl_records[0].raw_code == sample_dataset_samples[0].ghidra_decompiled_code
     assert "#include <stdio.h>" in rl_records[0].compile_reference_source
+    assert "strlen" in rl_records[0].allowed_callees
 
     class FakeAdapter:
         def run(self, *, binary_path, output_dir, project_name):
@@ -173,6 +174,7 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     fallback_output, json_valid = normalize_output_with_status("{not valid json")
     assert not json_valid
     assert fallback_output.cleaned_c == "{not valid json"
+    assert fallback_output.summary == ""
     runner = InferenceRunner(lambda _sample: output)
     assert runner.run([sample])[0].summary == "ok"
     assert summarize_improvements(sample, renamed)
@@ -224,6 +226,40 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     assert inspection_md.exists()
     assert inspection_jsonl.exists()
     assert "### Decompiled" in inspection_md.read_text(encoding="utf-8")
+
+
+def test_extract_source_functions_ignores_leading_comment_words() -> None:
+    from decomp_clarifier.schemas.generation import (
+        BuildSpec,
+        GeneratedFile,
+        GeneratedProject,
+        SemanticHints,
+    )
+
+    project = GeneratedProject(
+        project_id="comment_case",
+        summary="test",
+        difficulty="easy",
+        files=[
+            GeneratedFile(
+                path="src/main.c",
+                content="""#include <stdio.h>
+/* Returns number of tokens found in a non-empty line. */
+int tokenize(const char *text) {
+    return text != NULL;
+}
+""",
+            )
+        ],
+        tests=[],
+        build=BuildSpec(entrypoints=["src/main.c"], c_standard="c11", compiler_family="clang"),
+        semantic_hints=SemanticHints(project_purpose="test", function_intents=[]),
+    )
+
+    functions = extract_source_functions(project)
+
+    assert [item.name for item in functions] == ["tokenize"]
+    assert functions[0].code.startswith("int tokenize(")
 
 
 def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:

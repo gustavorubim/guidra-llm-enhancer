@@ -6,10 +6,10 @@ from pathlib import Path
 
 from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
 from decomp_clarifier.evaluation.compile_eval import compile_candidate
+from decomp_clarifier.inference.formatter import normalize_output_with_status
 from decomp_clarifier.settings import TrainingConfig
 from decomp_clarifier.training.grpo.data import prompt_from_record, reward_fields_from_record
-from decomp_clarifier.training.grpo.rewards import weighted_reward
-from decomp_clarifier.training.grpo.rollout import normalize_completion
+from decomp_clarifier.training.grpo.rewards import reward_breakdown
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.telemetry import (
     TrainingTelemetry,
@@ -33,6 +33,12 @@ def _dataset_size(dataset: object) -> int | None:
         return None
 
 
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
 def compute_completion_reward(
     completion: str,
     raw_code: str,
@@ -44,8 +50,44 @@ def compute_completion_reward(
     weights: dict[str, float],
     behavior_threshold: float = _BEHAVIOR_THRESHOLD,
 ) -> float:
+    return compute_completion_reward_details(
+        completion=completion,
+        raw_code=raw_code,
+        compile_reference_source=compile_reference_source,
+        target_clean_code=target_clean_code,
+        target_renamings_json=target_renamings_json,
+        allowed_imports_json=allowed_imports_json,
+        allowed_callees_json=allowed_callees_json,
+        weights=weights,
+        behavior_threshold=behavior_threshold,
+    )["total"]
+
+
+def compute_completion_reward_details(
+    completion: str,
+    raw_code: str,
+    compile_reference_source: str,
+    target_clean_code: str,
+    target_renamings_json: str,
+    allowed_imports_json: str,
+    allowed_callees_json: str,
+    weights: dict[str, float],
+    behavior_threshold: float = _BEHAVIOR_THRESHOLD,
+) -> dict[str, float]:
     try:
-        output = normalize_completion(completion)
+        output, json_valid = normalize_output_with_status(completion)
+        if not json_valid:
+            return {
+                "json_valid": 0.0,
+                "format": 0.0,
+                "cleanup": 0.0,
+                "naming": 0.0,
+                "compile": 0.0,
+                "behavior": 0.0,
+                "readability": 0.0,
+                "hallucination_penalty": 0.0,
+                "total": 0.0,
+            }
         renamings: dict[str, str] = json.loads(target_renamings_json)
         imports: list[str] = json.loads(allowed_imports_json)
         callees: list[str] = json.loads(allowed_callees_json)
@@ -58,8 +100,9 @@ def compute_completion_reward(
             raw_code,
             target_clean_code,
         )
-        return weighted_reward(
+        return reward_breakdown(
             output=output,
+            json_valid=json_valid,
             raw_code=raw_code,
             target_renamings=renamings,
             compile_success=compile_success,
@@ -69,7 +112,17 @@ def compute_completion_reward(
             weights=weights,
         )
     except Exception:  # noqa: BLE001
-        return 0.0
+        return {
+            "json_valid": 0.0,
+            "format": 0.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 0.0,
+            "behavior": 0.0,
+            "readability": 0.0,
+            "hallucination_penalty": 0.0,
+            "total": 0.0,
+        }
 
 
 def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
@@ -156,8 +209,8 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         renaming_maps = target_renamings or ["{}"] * n
         import_lists = allowed_imports or ["[]"] * n
         callee_lists = allowed_callees or ["[]"] * n
-        rewards = [
-            compute_completion_reward(
+        details = [
+            compute_completion_reward_details(
                 completion=completion,
                 raw_code=raw_codes[index % len(raw_codes)],
                 compile_reference_source=compile_sources[index % len(compile_sources)],
@@ -170,8 +223,21 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
             )
             for index, completion in enumerate(completions)
         ]
+        rewards = [item["total"] for item in details]
         reward_step += 1
         reward_metrics = reward_log_row(rewards, step=reward_step)
+        reward_metrics |= {
+            "components/json_valid_mean": _mean([item["json_valid"] for item in details]),
+            "components/format_mean": _mean([item["format"] for item in details]),
+            "components/cleanup_mean": _mean([item["cleanup"] for item in details]),
+            "components/naming_mean": _mean([item["naming"] for item in details]),
+            "components/compile_mean": _mean([item["compile"] for item in details]),
+            "components/behavior_mean": _mean([item["behavior"] for item in details]),
+            "components/readability_mean": _mean([item["readability"] for item in details]),
+            "components/hallucination_penalty_mean": _mean(
+                [item["hallucination_penalty"] for item in details]
+            ),
+        }
         telemetry.record_metrics(
             {key: value for key, value in reward_metrics.items() if key != "step"},
             step=reward_metrics["step"],

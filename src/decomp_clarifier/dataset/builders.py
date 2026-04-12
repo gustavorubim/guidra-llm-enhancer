@@ -41,6 +41,7 @@ def build_function_dataset(
             item.function_name: item.intent for item in project.semantic_hints.function_intents
         }
         for aligned in align_functions(project, parsed_project):
+            cleaned_source = normalize_source_for_target(aligned.source.code)
             for task_type in task_types:
                 sample = FunctionDatasetSample(
                     sample_id=hashlib.sha256(
@@ -54,11 +55,11 @@ def build_function_dataset(
                     opt_level=compile_manifest.opt_level,
                     binary_format=compile_manifest.binary_format,
                     source_function_name=aligned.source.name,
-                    source_code=aligned.source.code,
+                    source_code=cleaned_source,
                     compile_reference_source=source_files.get(
                         aligned.source.file_path, aligned.source.code
                     ),
-                    target_clean_code=normalize_source_for_target(aligned.source.code),
+                    target_clean_code=cleaned_source,
                     ghidra_function_name=aligned.ghidra.ghidra_function_name,
                     ghidra_decompiled_code=aligned.ghidra.decompiled_text,
                     assembly=aligned.ghidra.disassembly_text,
@@ -70,7 +71,7 @@ def build_function_dataset(
                         aligned.source.name, project.semantic_hints.project_purpose
                     ),
                     rename_map_target=derive_rename_map(
-                        aligned.source.code, aligned.ghidra.decompiled_text
+                        cleaned_source, aligned.ghidra.decompiled_text
                     ),
                     tests_ref=f"{project.project_id}/project_manifest.json",
                     difficulty=project.difficulty,

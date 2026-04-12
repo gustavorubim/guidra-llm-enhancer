@@ -153,6 +153,16 @@ def _run_checkpoint_evaluation(*args: Any, **kwargs: Any) -> Any:
     return run_checkpoint_evaluation(*args, **kwargs)
 
 
+def _resolve_grpo_base_model(paths: ProjectPaths, training_config: TrainingConfig) -> str:
+    if training_config.model.base_model_id:
+        return training_config.model.base_model_id
+    from decomp_clarifier.evaluation.checkpoint_eval import find_latest_completed_checkpoint
+
+    checkpoint_dir = find_latest_completed_checkpoint(paths, "sft")
+    training_config.model.base_model_id = str(checkpoint_dir)
+    return training_config.model.base_model_id
+
+
 @app.command("doctor")
 def doctor(
     training: bool = typer.Option(
@@ -541,6 +551,7 @@ def train_grpo(
         "train-grpo", app_profile=app_profile
     )
     training_config: TrainingConfig = load_training_config(paths.root, training_profile)
+    resolved_base_model = _resolve_grpo_base_model(paths, training_config)
     _write_resolved(
         run_dir / "resolved_config.yaml",
         {
@@ -549,11 +560,12 @@ def train_grpo(
         },
     )
     logger.info(
-        "starting train-grpo run_id=%s profile=%s dataset=%s output_dir=%s",
+        "starting train-grpo run_id=%s profile=%s dataset=%s output_dir=%s base_model=%s",
         run_id,
         training_profile,
         paths.processed_rl_dir / "rl_records.jsonl",
         run_dir / "model",
+        resolved_base_model,
     )
     manifest = _run_grpo_training(
         paths.processed_rl_dir / "rl_records.jsonl", run_dir / "model", training_config

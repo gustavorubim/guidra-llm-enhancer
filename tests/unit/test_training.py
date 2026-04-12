@@ -122,7 +122,8 @@ def test_training_utilities_and_rewards(
     dataset_path = tmp_path / "sft.jsonl"
     dataset_path.write_text('{"prompt":"p","response_json":"r"}\n', encoding="utf-8")
     records = load_sft_records(dataset_path)
-    assert combine_prompt_and_response(records[0]) == "p\n\nr"
+    assert combine_prompt_and_response(records[0]) == "p\nr"
+    assert combine_prompt_and_response(records[0], eos_token="<eos>") == "p\nr<eos>"
 
     sample = sample_dataset_samples[0]
     output = ClarifiedFunctionOutput(
@@ -141,6 +142,7 @@ def test_training_utilities_and_rewards(
     assert (
         weighted_reward(
             output=output,
+            json_valid=True,
             raw_code=sample.ghidra_decompiled_code,
             target_renamings=sample.rename_map_target,
             compile_success=True,
