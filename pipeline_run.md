@@ -390,7 +390,7 @@ This is a manual step.
 
 `train-grpo` does not automatically use the latest SFT output.
 
-Before GRPO, create a temporary training profile or edit `configs/training/grpo_qwen35_4b.yaml` so:
+Before GRPO, create a temporary training profile or edit `configs/training/grpo_qwen35_2b_12gb.yaml` so:
 
 - `model.base_model_id` points at the SFT model directory
 
@@ -404,13 +404,13 @@ model:
 
 Recommended approach:
 
-- copy `configs/training/grpo_qwen35_4b.yaml` to a new file
+- copy `configs/training/grpo_qwen35_2b_12gb.yaml` to a new file
 - change only `model.base_model_id`
 - run `train-grpo --training-profile <your_new_profile_name>`
 
 Important note:
 
-The CLI loads exactly one training profile file. The `windows_cuda_16gb.yaml` and related files are not auto-composed on top of `sft_qwen35_4b.yaml` or `grpo_qwen35_4b.yaml`. If you need lower-memory settings, create a custom profile that bakes those values in.
+The CLI loads exactly one training profile file. The `windows_cuda_16gb.yaml` and related files are not auto-composed on top of `sft_qwen35_2b_12gb.yaml` or `grpo_qwen35_2b_12gb.yaml`. If you need different memory settings, create a custom profile that bakes those values in.
 
 ### 9. Run GRPO
 
@@ -421,7 +421,7 @@ python -m decomp_clarifier.cli train-grpo
 Or, if you made a custom profile:
 
 ```powershell
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_4b_from_sft
+python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_12gb_from_sft
 ```
 
 Expected output path:
@@ -533,5 +533,5 @@ python -m decomp_clarifier.cli run-baselines
 python -m decomp_clarifier.cli eval
 python -m decomp_clarifier.cli report
 python -m decomp_clarifier.cli train-sft
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_4b_from_sft
+python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_12gb_from_sft
 ```

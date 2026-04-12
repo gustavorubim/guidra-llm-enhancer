@@ -498,7 +498,7 @@ def demo(
 
 @app.command("train-sft")
 def train_sft(
-    training_profile: str = typer.Option("sft_qwen35_4b"),
+    training_profile: str = typer.Option("sft_qwen35_2b_12gb"),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
@@ -528,7 +528,7 @@ def train_sft(
 
 @app.command("train-grpo")
 def train_grpo(
-    training_profile: str = typer.Option("grpo_qwen35_4b"),
+    training_profile: str = typer.Option("grpo_qwen35_2b_12gb"),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(

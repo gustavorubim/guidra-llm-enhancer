@@ -115,7 +115,7 @@ Current reward components:
 | `readability` | `0.0` to `1.0` | Easier-to-read code | Rewards readability improvement over raw decompiler text, penalizing long lines, placeholders, and `goto` usage |
 | `hallucination_penalty` | `0.0+` penalty | Fewer invented calls | Penalizes calls not present in the binary-grounded imports/callees context |
 
-Default GRPO weights from `configs/training/grpo_qwen35_4b.yaml`:
+Default GRPO weights from `configs/training/grpo_qwen35_2b_12gb.yaml`:
 
 | Weight key | Default |
 |---|---|
@@ -157,20 +157,20 @@ Current training stages:
 5. `train-grpo` reuses the packed records, extracts the prompt field, generates multiple completions per prompt, and scores them with the weighted reward stack above.
 6. `train-sft` writes loss telemetry, and `train-grpo` writes reward telemetry, as JSONL/CSV logs plus TensorBoard and PNG artifacts.
 
-Current SFT defaults in `configs/training/sft_qwen35_4b.yaml`:
+Current SFT defaults in `configs/training/sft_qwen35_2b_12gb.yaml`:
 
 | Setting | Default |
 |---|---|
-| Base model | `Qwen/Qwen3.5-4B` |
+| Base model | `Qwen/Qwen3.5-2B` |
 | Loader | `unsloth` |
 | Quantization | `4-bit` |
-| LoRA rank | `16` |
-| Max sequence length | `4096` |
-| Batch size | `2` |
-| Gradient accumulation | `8` |
-| Epochs | `2` |
+| LoRA rank | `8` |
+| Max sequence length | `2000` |
+| Batch size | `1` |
+| Gradient accumulation | `4` |
+| Epochs | `1` |
 
-Hardware overlays are available in `configs/training/windows_cuda_16gb.yaml`, `configs/training/windows_cuda_24gb.yaml`, and `configs/training/windows_cuda_48gb.yaml` to reduce or expand sequence length and batch size for different GPUs.
+The default training profiles are tuned for a `12 GB` class GPU. The older `4B` profiles are still available under `configs/training/` for larger cards. Hardware overlays are available in `configs/training/windows_cuda_16gb.yaml`, `configs/training/windows_cuda_24gb.yaml`, and `configs/training/windows_cuda_48gb.yaml` to reduce or expand sequence length and batch size for different GPUs.
 
 What is not wired yet:
 
