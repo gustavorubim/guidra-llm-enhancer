@@ -40,6 +40,11 @@ def test_doctor_exit_code_and_render() -> None:
                 "stdout_tail": "2.20.0",
                 "stderr_tail": None,
             },
+            "trl_grpo_import": {
+                "ok": True,
+                "stdout_tail": "GRPOTrainer",
+                "stderr_tail": None,
+            },
         },
     }
 

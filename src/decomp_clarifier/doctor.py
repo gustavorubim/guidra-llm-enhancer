@@ -107,6 +107,14 @@ def _probe_training(root: Path) -> dict[str, Any]:
         root,
         "import tensorboard; from tensorboard.main import run_main; print(tensorboard.__version__)",
     )
+    trl_grpo_import = _probe_import(
+        root,
+        "import unsloth; "
+        "from decomp_clarifier.training.utils.trl_compat import patch_trl_optional_availability; "
+        "patch_trl_optional_availability(); "
+        "from trl import GRPOConfig, GRPOTrainer; "
+        "print('GRPOTrainer')",
+    )
 
     return {
         "ok": (
@@ -116,6 +124,7 @@ def _probe_training(root: Path) -> dict[str, Any]:
             and xformers_import["ok"]
             and bitsandbytes_import["ok"]
             and tensorboard_import["ok"]
+            and trl_grpo_import["ok"]
         ),
         "windows_cuda_guard": guard,
         "version_lock": version_lock,
@@ -124,6 +133,7 @@ def _probe_training(root: Path) -> dict[str, Any]:
         "xformers_import": xformers_import,
         "bitsandbytes_import": bitsandbytes_import,
         "tensorboard_import": tensorboard_import,
+        "trl_grpo_import": trl_grpo_import,
     }
 
 
@@ -204,6 +214,7 @@ def render_doctor_report(report: dict[str, Any], include_training: bool = False)
             _format_import_probe("xFormers import", training["xformers_import"]),
             _format_import_probe("bitsandbytes import", training["bitsandbytes_import"]),
             _format_import_probe("TensorBoard import", training["tensorboard_import"]),
+            _format_import_probe("TRL GRPO import", training["trl_grpo_import"]),
         ]
     )
     return "\n".join(lines)

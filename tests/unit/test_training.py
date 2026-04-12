@@ -37,6 +37,7 @@ from decomp_clarifier.training.sft.callbacks import write_training_summary
 from decomp_clarifier.training.sft.data import combine_prompt_and_response, load_sft_records
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.memory_profiles import select_memory_profile
+from decomp_clarifier.training.utils.trl_compat import normalize_optional_flag
 from decomp_clarifier.training.utils.version_lock import collect_versions, validate_version_lock
 from decomp_clarifier.training.windows_guard import TrainingEnvironmentError, ensure_windows_cuda
 
@@ -189,6 +190,10 @@ def test_training_utilities_and_rewards(
         allowed_callees_json="[]",
         weights={},
     ) == 0.0
+
+    assert not normalize_optional_flag((False, None))
+    assert normalize_optional_flag((True, "1.0"))
+    assert not normalize_optional_flag(False)
 
 
 def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:
@@ -347,6 +352,11 @@ def test_run_training_wrappers_with_fake_modules(
             Path(path).mkdir(parents=True, exist_ok=True)
 
     class FakeGRPOTrainer(FakeSFTTrainer):
+        def __init__(self, **kwargs):
+            assert "processing_class" in kwargs
+            assert "tokenizer" not in kwargs
+            super().__init__(**kwargs)
+
         def train(self):
             reward_funcs = self.kwargs.get("reward_funcs", [])
             if reward_funcs:
@@ -388,6 +398,10 @@ def test_run_training_wrappers_with_fake_modules(
     )
     monkeypatch.setitem(sys.modules, "datasets", FakeDatasetsModule())
     monkeypatch.setitem(sys.modules, "trl", fake_trl)
+    monkeypatch.setattr(
+        "decomp_clarifier.training.grpo.train.patch_trl_optional_availability",
+        lambda: None,
+    )
 
     dataset_path = tmp_path / "records.jsonl"
     dataset_path.write_text('{"prompt":"prompt","response_json":"response"}\n', encoding="utf-8")

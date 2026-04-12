@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
@@ -9,17 +10,24 @@ from decomp_clarifier.settings import TrainingConfig
 from decomp_clarifier.training.grpo.data import prompt_from_record, reward_fields_from_record
 from decomp_clarifier.training.grpo.rewards import weighted_reward
 from decomp_clarifier.training.grpo.rollout import normalize_completion
-from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.telemetry import (
     TrainingTelemetry,
     TrainingTelemetryCallback,
     reward_log_row,
 )
+from decomp_clarifier.training.utils.trl_compat import patch_trl_optional_availability
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
 from decomp_clarifier.training.windows_guard import ensure_windows_cuda
 
 _BEHAVIOR_THRESHOLD = 0.35
+
+
+def _dataset_size(dataset: object) -> int | None:
+    try:
+        return len(dataset)  # type: ignore[arg-type]
+    except TypeError:
+        return None
 
 
 def compute_completion_reward(
@@ -62,19 +70,35 @@ def compute_completion_reward(
 
 
 def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
+    logger = logging.getLogger("decomp_clarifier")
     ensure_windows_cuda()
     versions = validate_version_lock()
     hardware = detect_hardware()
     telemetry = TrainingTelemetry("grpo", output_dir)
+    logger.info(
+        "starting grpo training dataset=%s output_dir=%s model=%s",
+        dataset_path,
+        output_dir,
+        config.model.base_model_id,
+    )
 
     import unsloth  # noqa: F401 - must be imported before trl/transformers  # type: ignore[import-not-found]
     from datasets import load_dataset  # type: ignore[import-not-found]
+
+    patch_trl_optional_availability()
     from trl import GRPOConfig, GRPOTrainer  # type: ignore[import-not-found]
+
+    from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 
     model, tokenizer = load_model_and_tokenizer(config)
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
     dataset = dataset.map(
         lambda row: {"prompt": prompt_from_record(row), **reward_fields_from_record(row)}
+    )
+    dataset_size = _dataset_size(dataset)
+    logger.info(
+        "loaded grpo dataset rows=%s",
+        dataset_size if dataset_size is not None else "unknown",
     )
 
     weights = config.training.reward_weights
@@ -130,7 +154,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     max_steps = config.training.max_steps if config.training.max_steps is not None else -1
     trainer = GRPOTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         reward_funcs=[reward_func],
         train_dataset=dataset,
         args=GRPOConfig(
@@ -146,6 +170,14 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
             report_to=["tensorboard"],
         ),
         callbacks=[TrainingTelemetryCallback(telemetry)],
+    )
+    logger.info(
+        "configured grpo trainer max_prompt_length=%s max_completion_length=%s "
+        "generations=%s max_steps=%s",
+        config.training.max_prompt_length or 512,
+        config.training.max_completion_length or 256,
+        config.training.generations_per_prompt or 4,
+        max_steps,
     )
     train_result = trainer.train()
     trainer.save_model(str(output_dir))
@@ -166,5 +198,11 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
             sort_keys=True,
         ),
         encoding="utf-8",
+    )
+    logger.info(
+        "finished grpo training manifest=%s telemetry_jsonl=%s tensorboard_dir=%s",
+        manifest_path,
+        telemetry_summary["metrics_jsonl"],
+        telemetry_summary["tensorboard_dir"],
     )
     return manifest_path

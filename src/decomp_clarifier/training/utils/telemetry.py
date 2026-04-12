@@ -3,23 +3,19 @@ from __future__ import annotations
 import base64
 import csv
 import json
+import logging
 import math
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import pstdev
 from typing import Any
 
-try:  # pragma: no cover - exercised indirectly in training environments
-    from transformers import TrainerCallback
-except Exception:  # pragma: no cover - lightweight fallback for tests without transformers
-    class TrainerCallback:  # type: ignore[no-redef]
-        pass
-
 
 _PLACEHOLDER_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2pQ7cAAAAASUVORK5CYII="
 )
 _RESERVED_COLUMNS = ("step", "epoch", "source", "recorded_at")
+_TELEMETRY_LOGGER = logging.getLogger("decomp_clarifier")
 
 
 def write_training_summary(path: Path, metrics: dict[str, Any]) -> Path:
@@ -201,6 +197,17 @@ class TrainingTelemetry:
                 continue
             normalized[key] = _coerce_scalar(value)
         self.rows.append(normalized)
+        log_metrics = {
+            key: value
+            for key, value in normalized.items()
+            if key not in ("recorded_at", "source") and value is not None
+        }
+        _TELEMETRY_LOGGER.info(
+            "training telemetry stage=%s source=%s metrics=%s",
+            self.stage,
+            source,
+            log_metrics,
+        )
         with self.metrics_jsonl_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(normalized, sort_keys=True) + "\n")
 
@@ -275,7 +282,13 @@ class TrainingTelemetry:
                     rows=self.rows,
                     metric_keys=_metric_candidates(
                         self.rows,
-                        preferred=["reward_mean", "reward", "mean_reward", "reward_max", "reward_min"],
+                        preferred=[
+                            "reward_mean",
+                            "reward",
+                            "mean_reward",
+                            "reward_max",
+                            "reward_min",
+                        ],
                         contains="reward",
                     ),
                     output_path=self.plots_dir / "grpo_reward.png",
@@ -298,9 +311,8 @@ class TrainingTelemetry:
         return summary
 
 
-class TrainingTelemetryCallback(TrainerCallback):
+class TrainingTelemetryCallback:
     def __init__(self, telemetry: TrainingTelemetry) -> None:
-        super().__init__()
         self.telemetry = telemetry
 
     def on_log(

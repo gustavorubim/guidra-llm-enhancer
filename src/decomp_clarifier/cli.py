@@ -501,7 +501,7 @@ def train_sft(
     training_profile: str = typer.Option("sft_qwen35_4b"),
     app_profile: str = typer.Option("default"),
 ) -> None:
-    _root, paths, run_id, run_dir, _logger, app_config = _bootstrap(
+    _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "train-sft", app_profile=app_profile
     )
     training_config: TrainingConfig = load_training_config(paths.root, training_profile)
@@ -512,9 +512,17 @@ def train_sft(
             "training": training_config.model_dump(mode="python"),
         },
     )
+    logger.info(
+        "starting train-sft run_id=%s profile=%s dataset=%s output_dir=%s",
+        run_id,
+        training_profile,
+        paths.processed_sft_dir / "sft_records.jsonl",
+        run_dir / "model",
+    )
     manifest = _run_sft_training(
         paths.processed_sft_dir / "sft_records.jsonl", run_dir / "model", training_config
     )
+    logger.info("completed train-sft manifest=%s", manifest)
     typer.echo(str(manifest))
 
 
@@ -523,7 +531,7 @@ def train_grpo(
     training_profile: str = typer.Option("grpo_qwen35_4b"),
     app_profile: str = typer.Option("default"),
 ) -> None:
-    _root, paths, run_id, run_dir, _logger, app_config = _bootstrap(
+    _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "train-grpo", app_profile=app_profile
     )
     training_config: TrainingConfig = load_training_config(paths.root, training_profile)
@@ -534,9 +542,17 @@ def train_grpo(
             "training": training_config.model_dump(mode="python"),
         },
     )
+    logger.info(
+        "starting train-grpo run_id=%s profile=%s dataset=%s output_dir=%s",
+        run_id,
+        training_profile,
+        paths.processed_rl_dir / "rl_records.jsonl",
+        run_dir / "model",
+    )
     manifest = _run_grpo_training(
         paths.processed_rl_dir / "rl_records.jsonl", run_dir / "model", training_config
     )
+    logger.info("completed train-grpo manifest=%s", manifest)
     typer.echo(str(manifest))
 
 
