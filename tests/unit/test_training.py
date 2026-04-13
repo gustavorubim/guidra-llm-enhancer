@@ -29,10 +29,13 @@ from decomp_clarifier.training.grpo.rewards import (
     behavior_reward,
     cleanup_reward,
     compile_reward,
+    decompiler_type_penalty,
     format_reward,
     hallucination_penalty,
     naming_reward,
     readability_reward,
+    safety_gate_factor,
+    signature_reward,
     weighted_reward,
 )
 from decomp_clarifier.training.grpo.train import compute_completion_reward
@@ -138,12 +141,18 @@ def test_training_utilities_and_rewards(
     assert compile_reward(True) == 1.0
     assert behavior_reward(True) == 1.0
     assert readability_reward(output, sample.ghidra_decompiled_code) >= 0.0
+    assert signature_reward(output, sample.target_clean_code, sample.source_function_name) == 1.0
+    assert decompiler_type_penalty(output) == 0.0
     assert hallucination_penalty(output, sample.imports, sample.callees) >= 0.0
+    assert safety_gate_factor(compile_success=True, behavior_success=True) == 1.0
+    assert safety_gate_factor(compile_success=False, behavior_success=True) < 1.0
     assert (
         weighted_reward(
             output=output,
             json_valid=True,
             raw_code=sample.ghidra_decompiled_code,
+            target_clean_code=sample.target_clean_code,
+            source_function_name=sample.source_function_name,
             target_renamings=sample.rename_map_target,
             compile_success=True,
             behavior_success=True,
@@ -156,11 +165,31 @@ def test_training_utilities_and_rewards(
                 "compile": 1.0,
                 "behavior": 1.0,
                 "readability": 1.0,
+                "signature": 1.0,
                 "hallucination_penalty": 1.0,
+                "decompiler_type_penalty": 1.0,
             },
         )
         >= 0.0
     )
+    decompiler_output = ClarifiedFunctionOutput(
+        summary="Counts characters.",
+        confidence=0.9,
+        renamings={},
+        cleaned_c="ulong64 helper(undefined8 param_1) { return 0; }",
+    )
+    assert decompiler_type_penalty(decompiler_output) >= 1.0
+    assert signature_reward(
+        decompiler_output, sample.target_clean_code, sample.source_function_name
+    ) < 1.0
+    typed_target = "int helper(size_t length) { return 0; }"
+    typed_mismatch_output = ClarifiedFunctionOutput(
+        summary="Returns zero.",
+        confidence=0.9,
+        renamings={},
+        cleaned_c="int helper(ulong64 length) { return 0; }",
+    )
+    assert signature_reward(typed_mismatch_output, typed_target, "helper") < 1.0
     verification = verify_output(sample, output)
     assert verification.field_complete
 
@@ -211,7 +240,8 @@ def test_training_utilities_and_rewards(
             "hallucination_penalty": 0.0,
         },
     )
-    assert compile_only_reward == (1.0 if resolve_clang_executable("clang") is not None else 0.0)
+    expected_compile_only = 0.6 if resolve_clang_executable("clang") is not None else 0.0
+    assert compile_only_reward == expected_compile_only
 
     assert compute_completion_reward(
         completion=(

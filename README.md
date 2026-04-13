@@ -113,7 +113,9 @@ Current reward components:
 | `compile` | `0` or `1` | Syntactic validity | Runs `clang -fsyntax-only` on the candidate with includes copied from the reference source |
 | `behavior` | `0` or `1` | Semantic plausibility | Uses a token-overlap proxy and currently passes at `>= 0.35` similarity |
 | `readability` | `0.0` to `1.0` | Easier-to-read code | Rewards readability improvement over raw decompiler text, penalizing long lines, placeholders, and `goto` usage |
+| `signature` | `0.0` to `1.0` | Preserves the original function shape | Rewards matching function name, arity, return type, and exact normalized signature |
 | `hallucination_penalty` | `0.0+` penalty | Fewer invented calls | Penalizes calls not present in the binary-grounded imports/callees context |
+| `decompiler_type_penalty` | `0.0+` penalty | Fewer Ghidra pseudo-types | Penalizes artifacts like `undefined8`, `ulong64`, `ulonglong`, and `longlong` |
 
 Default GRPO weights from `configs/training/grpo_qwen35_2b_12gb.yaml`:
 
@@ -122,14 +124,17 @@ Default GRPO weights from `configs/training/grpo_qwen35_2b_12gb.yaml`:
 | `format` | `1.0` |
 | `cleanup` | `1.5` |
 | `naming` | `1.5` |
-| `compile` | `2.0` |
-| `behavior` | `3.0` |
+| `compile` | `3.0` |
+| `behavior` | `2.0` |
 | `readability` | `1.0` |
+| `signature` | `1.0` |
 | `hallucination_penalty` | `2.0` |
+| `decompiler_type_penalty` | `1.0` |
 
 Important status note:
 
 - The current `compile` and `behavior` checks are conservative proxies, not full recompilation and differential execution against the original binary yet.
+- GRPO now uses a shorter RL-specific prompt than SFT so rollout prompts fit within the 12 GB profile without truncating most samples.
 - Both training entry points now emit per-step JSONL/CSV logs, TensorBoard event logs, and PNG telemetry plots under each run's `model/` directory.
 
 ## Training Curriculum

@@ -520,6 +520,11 @@ Success criteria:
 - `reward_mean` is being recorded in `grpo_metrics.jsonl`
 - rewards are not flat zero for the entire run
 
+Important note:
+
+- `rl_records.jsonl` now uses a compact GRPO-specific prompt rather than the full SFT prompt. This keeps most rollout prompts under the `896` token cap in the 12 GB profile.
+- The default GRPO reward stack now includes signature fidelity and a decompiler-type penalty, and it down-weights positive reward when compile or behavior checks fail.
+
 ### 9.5 Evaluate The GRPO Checkpoint
 
 After GRPO finishes, evaluate the checkpoint on the held-out split:

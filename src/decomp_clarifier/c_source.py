@@ -6,7 +6,13 @@ _CONTROL_KEYWORDS = {"if", "for", "while", "switch", "return", "sizeof"}
 _FUNCTION_SIGNATURE_LINE = re.compile(
     r"^\s*(?:[A-Za-z_][\w\s\*]*?\s+)?(?P<name>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{\s*$"
 )
+_FUNCTION_HEADER = re.compile(
+    r"^\s*(?P<signature>(?:[A-Za-z_][\w\s\*]*?\s+)?(?P<name>[A-Za-z_]\w*)\s*\((?P<params>[^;{}]*)\))\s*(?:\{|$)"
+)
 _CALL_IDENTIFIER_PATTERN = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+_CALLING_CONVENTION_PATTERN = re.compile(
+    r"\b__(?:cdecl|stdcall|fastcall|thiscall|vectorcall)\b"
+)
 
 
 def looks_like_function_signature_line(line: str) -> bool:
@@ -22,6 +28,92 @@ def function_name_from_signature_line(line: str) -> str | None:
         return None
     name = match.group("name")
     return None if name in _CONTROL_KEYWORDS else name
+
+
+def extract_function_signature(code: str) -> str | None:
+    cleaned = strip_leading_non_code_lines(code)
+    if not cleaned:
+        return None
+    prefix = cleaned.split("{", 1)[0]
+    header = " ".join(part.strip() for part in prefix.splitlines() if part.strip())
+    match = _FUNCTION_HEADER.match(header)
+    if match is None:
+        return None
+    name = match.group("name")
+    if name in _CONTROL_KEYWORDS:
+        return None
+    return match.group("signature").strip()
+
+
+def function_name_from_signature_text(signature: str) -> str | None:
+    match = _FUNCTION_HEADER.match(signature.strip())
+    if match is None:
+        return None
+    name = match.group("name")
+    return None if name in _CONTROL_KEYWORDS else name
+
+
+def parameter_count_from_signature(signature: str) -> int | None:
+    match = _FUNCTION_HEADER.match(signature.strip())
+    if match is None:
+        return None
+    params = match.group("params").strip()
+    if not params or params == "void":
+        return 0
+    return len([param for param in params.split(",") if param.strip()])
+
+
+def parameter_types_from_signature(signature: str) -> list[str] | None:
+    match = _FUNCTION_HEADER.match(signature.strip())
+    if match is None:
+        return None
+    params = match.group("params").strip()
+    if not params or params == "void":
+        return []
+
+    types: list[str] = []
+    for raw_param in params.split(","):
+        param = raw_param.strip()
+        if not param:
+            continue
+        param = _CALLING_CONVENTION_PATTERN.sub("", param)
+        param = re.sub(r"\s+", " ", param).strip()
+        param = re.sub(r"\s*\[[^\]]*\]", "[]", param)
+        match_name = re.match(
+            r"^(?P<prefix>.*?)(?P<name>[A-Za-z_]\w*)(?P<suffix>\s*(?:\[\])*)$",
+            param,
+        )
+        if match_name is not None and match_name.group("prefix").strip():
+            param_type = f"{match_name.group('prefix').strip()}{match_name.group('suffix')}"
+        else:
+            param_type = param
+        param_type = re.sub(r"\s*\*\s*", "*", param_type)
+        param_type = re.sub(r"\s+", " ", param_type).strip()
+        types.append(param_type)
+    return types
+
+
+def return_type_from_signature(signature: str) -> str | None:
+    stripped = signature.strip()
+    match = _FUNCTION_HEADER.match(stripped)
+    if match is None:
+        return None
+    return_prefix = stripped[: match.start("name")].strip()
+    if not return_prefix:
+        return None
+    normalized = _CALLING_CONVENTION_PATTERN.sub("", return_prefix)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized or None
+
+
+def normalize_function_signature(signature: str) -> str:
+    normalized = _CALLING_CONVENTION_PATTERN.sub("", signature)
+    normalized = re.sub(r"\s*\*\s*", "*", normalized)
+    normalized = re.sub(r"\s*,\s*", ", ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"\(\s*", "(", normalized)
+    normalized = re.sub(r"\s*\)", ")", normalized)
+    return normalized.strip()
 
 
 def iter_function_starts(content: str) -> list[tuple[int, str]]:

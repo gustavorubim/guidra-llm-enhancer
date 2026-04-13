@@ -88,7 +88,10 @@ def compute_completion_reward_details(
                 "compile": 0.0,
                 "behavior": 0.0,
                 "readability": 0.0,
+                "signature": 0.0,
                 "hallucination_penalty": 0.0,
+                "decompiler_type_penalty": 0.0,
+                "gate_factor": 0.0,
                 "total": 0.0,
             }
         renamings: dict[str, str] = json.loads(target_renamings_json)
@@ -109,6 +112,8 @@ def compute_completion_reward_details(
             output=output,
             json_valid=json_valid,
             raw_code=raw_code,
+            target_clean_code=target_clean_code,
+            source_function_name=source_function_name,
             target_renamings=renamings,
             compile_success=compile_success,
             behavior_success=behavior_success,
@@ -125,7 +130,10 @@ def compute_completion_reward_details(
             "compile": 0.0,
             "behavior": 0.0,
             "readability": 0.0,
+            "signature": 0.0,
             "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+            "gate_factor": 0.0,
             "total": 0.0,
         }
 
@@ -234,17 +242,10 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         rewards = [item["total"] for item in details]
         reward_step += 1
         reward_metrics = reward_log_row(rewards, step=reward_step)
+        component_names = sorted({key for item in details for key in item if key != "total"})
         reward_metrics |= {
-            "components/json_valid_mean": _mean([item["json_valid"] for item in details]),
-            "components/format_mean": _mean([item["format"] for item in details]),
-            "components/cleanup_mean": _mean([item["cleanup"] for item in details]),
-            "components/naming_mean": _mean([item["naming"] for item in details]),
-            "components/compile_mean": _mean([item["compile"] for item in details]),
-            "components/behavior_mean": _mean([item["behavior"] for item in details]),
-            "components/readability_mean": _mean([item["readability"] for item in details]),
-            "components/hallucination_penalty_mean": _mean(
-                [item["hallucination_penalty"] for item in details]
-            ),
+            f"components/{name}_mean": _mean([item[name] for item in details])
+            for name in component_names
         }
         telemetry.record_metrics(
             {key: value for key, value in reward_metrics.items() if key != "step"},

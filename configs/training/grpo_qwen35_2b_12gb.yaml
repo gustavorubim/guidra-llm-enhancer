@@ -27,7 +27,9 @@ training:
     format: 1.0
     cleanup: 1.5
     naming: 1.5
-    compile: 2.0
-    behavior: 1.5
+    compile: 3.0
+    behavior: 2.0
     readability: 1.0
+    signature: 1.0
     hallucination_penalty: 2.0
+    decompiler_type_penalty: 1.0
