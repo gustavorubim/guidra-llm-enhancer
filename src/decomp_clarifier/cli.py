@@ -10,7 +10,7 @@ from typing import Any
 import typer
 import yaml
 
-from decomp_clarifier.adapters.compiler_clang import ClangCompiler
+from decomp_clarifier.adapters.compiler_clang import ClangCompiler, resolve_clang_executable
 from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 from decomp_clarifier.adapters.ghidra_headless import GhidraHeadlessAdapter
 from decomp_clarifier.adapters.openrouter_client import OpenRouterClient
@@ -37,6 +37,7 @@ from decomp_clarifier.schemas.compiler import CompileManifest
 from decomp_clarifier.schemas.dataset import FunctionDatasetSample
 from decomp_clarifier.schemas.evaluation import ReportExample, SampleEvaluation
 from decomp_clarifier.schemas.generation import GeneratedProject
+from decomp_clarifier.schemas.model_io import PredictionRecord
 from decomp_clarifier.settings import (
     AppConfig,
     CompileConfig,
@@ -87,6 +88,16 @@ def _ensure_compiler_available(compiler: ClangCompiler) -> None:
     except FileNotFoundError as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
+
+
+def _warn_if_clang_missing(logger: Any, command_name: str) -> None:
+    if resolve_clang_executable("clang") is not None:
+        return
+    logger.warning(
+        "WARNING: clang not found on PATH - compile_success_rate may be 0.0 for all "
+        "samples in %s. Install clang or add it to PATH to get real compile metrics.",
+        command_name,
+    )
 
 
 def _load_generated_projects(paths: ProjectPaths) -> list[GeneratedProject]:
@@ -385,49 +396,133 @@ def build_dataset(
 def run_baselines(
     app_profile: str = typer.Option("default"),
     model_id: str = typer.Option("openai/gpt-4.1-mini"),
+    generation_model_id: str = typer.Option("openai/gpt-5.4-mini"),
+    strong_model_id: str = typer.Option("openai/gpt-5.4-xhigh"),
+    base_model_id: str | None = typer.Option(None),
 ) -> None:
     root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "baseline", app_profile=app_profile
     )
+    _warn_if_clang_missing(logger, "run-baselines")
     dataset_path = paths.processed_sft_dir / "function_dataset.jsonl"
     samples = _load_dataset_samples(dataset_path)
-    baseline = PromptOnlyCleanupBaseline(
-        client=OpenRouterClient(
+    client = (
+        OpenRouterClient(
             api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url=app_config.run.openrouter_base_url,
             cache=FilesystemCache(paths.root / "data" / "cache" / "openrouter"),
         )
         if os.getenv("OPENROUTER_API_KEY")
-        else None,
+        else None
+    )
+    baseline = PromptOnlyCleanupBaseline(
+        client=client,
         prompt_template=load_template(root / "configs" / "prompts" / "function_cleanup.md"),
         model=model_id,
     )
-    predictions: list[dict[str, Any]] = []
+    generation_baseline = (
+        PromptOnlyCleanupBaseline(
+            client=client,
+            prompt_template=load_template(root / "configs" / "prompts" / "function_cleanup.md"),
+            model=generation_model_id,
+        )
+        if client is not None
+        else None
+    )
+    strong_baseline = (
+        PromptOnlyCleanupBaseline(
+            client=client,
+            prompt_template=load_template(root / "configs" / "prompts" / "function_cleanup.md"),
+            model=strong_model_id,
+        )
+        if client is not None
+        else None
+    )
+    if client is None:
+        logger.warning(
+            "OPENROUTER_API_KEY not set; skipping generation_model and strong_model baselines."
+        )
+
+    base_qwen_predictor = None
+    if base_model_id:
+        try:
+            import unsloth  # noqa: F401  # type: ignore[import-not-found]
+
+            from decomp_clarifier.dataset.prompt_formatter import format_rl_prompt
+            from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
+
+            base_config = load_training_config(root, "grpo_qwen35_2b_12gb")
+            base_config.model.base_model_id = base_model_id
+            base_qwen_predictor = CheckpointPredictor(
+                base_model_id,
+                base_config,
+                prompt_formatter=format_rl_prompt,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("skipping base_qwen baseline: %s", exc)
+
+    predictions: list[PredictionRecord] = []
     for sample in samples:
         predictions.append(
-            {
-                "sample_id": sample.sample_id,
-                "system": "raw_ghidra",
-                "output": raw_ghidra.predict(sample).model_dump(mode="python"),
-            }
+            PredictionRecord(
+                sample_id=sample.sample_id,
+                system="raw_ghidra",
+                output=raw_ghidra.predict(sample),
+                raw_text=None,
+                json_valid=True,
+            )
         )
         predictions.append(
-            {
-                "sample_id": sample.sample_id,
-                "system": "naming_only",
-                "output": naming_only.predict(sample).model_dump(mode="python"),
-            }
+            PredictionRecord(
+                sample_id=sample.sample_id,
+                system="naming_only",
+                output=naming_only.predict(sample),
+                raw_text=None,
+                json_valid=True,
+            )
         )
         predictions.append(
-            {
-                "sample_id": sample.sample_id,
-                "system": "prompt_only_cleanup",
-                "output": baseline.predict(sample).model_dump(mode="python"),
-            }
+            PredictionRecord(
+                sample_id=sample.sample_id,
+                system="prompt_only_cleanup",
+                output=baseline.predict(sample),
+                raw_text=None,
+                json_valid=True,
+            )
         )
+        if generation_baseline is not None:
+            predictions.append(
+                PredictionRecord(
+                    sample_id=sample.sample_id,
+                    system="generation_model",
+                    output=generation_baseline.predict(sample),
+                    raw_text=None,
+                    json_valid=True,
+                )
+            )
+        if strong_baseline is not None:
+            predictions.append(
+                PredictionRecord(
+                    sample_id=sample.sample_id,
+                    system="strong_model",
+                    output=strong_baseline.predict(sample),
+                    raw_text=None,
+                    json_valid=True,
+                )
+            )
+        if base_qwen_predictor is not None:
+            predictions.append(
+                base_qwen_predictor.predict(
+                    sample,
+                    system="base_qwen",
+                    max_new_tokens=384,
+                    temperature=0.0,
+                )
+            )
     output_path = run_dir / "baseline_predictions.jsonl"
     output_path.write_text(
-        "\n".join(json.dumps(item) for item in predictions) + "\n", encoding="utf-8"
+        "\n".join(record.model_dump_json() for record in predictions) + "\n",
+        encoding="utf-8",
     )
     logger.info("wrote %s baseline predictions", len(predictions))
     typer.echo(str(output_path))
@@ -590,6 +685,7 @@ def eval_sft_checkpoint(
     root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "eval-sft-checkpoint", app_profile=app_profile
     )
+    _warn_if_clang_missing(logger, "eval-sft-checkpoint")
     resolved_checkpoint = (
         paths.resolve(checkpoint_dir)
         if checkpoint_dir is not None
@@ -649,6 +745,7 @@ def eval_grpo_checkpoint(
     root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "eval-grpo-checkpoint", app_profile=app_profile
     )
+    _warn_if_clang_missing(logger, "eval-grpo-checkpoint")
     resolved_checkpoint = (
         paths.resolve(checkpoint_dir)
         if checkpoint_dir is not None

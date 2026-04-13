@@ -9,13 +9,17 @@ import yaml
 
 from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
 from decomp_clarifier.evaluation.readability_eval import readability_improvement
-from decomp_clarifier.evaluation.report_builder import build_report, write_report
+from decomp_clarifier.evaluation.report_builder import (
+    build_report,
+    render_comparison_table,
+    write_report,
+)
 from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
 from decomp_clarifier.inference.explain import summarize_improvements
 from decomp_clarifier.paths import ProjectPaths
 from decomp_clarifier.schemas.dataset import FunctionDatasetSample
 from decomp_clarifier.schemas.evaluation import ReportExample, SampleEvaluation
-from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput, PredictionRecord
+from decomp_clarifier.schemas.model_io import PredictionRecord
 from decomp_clarifier.settings import TrainingConfig, load_training_config
 from decomp_clarifier.training.grpo.verifier import verify_output
 
@@ -94,7 +98,7 @@ def evaluate_prediction_records(
         sample = samples_by_id.get(record.sample_id)
         if sample is None:
             continue
-        verification = verify_output(sample, record.output)
+        verification = verify_output(sample, record.output, json_valid=record.json_valid)
         evaluations.append(
             SampleEvaluation(
                 sample_id=record.sample_id,
@@ -126,15 +130,7 @@ def load_baseline_reports(
         payload = json.loads(line)
         if payload["sample_id"] not in samples_by_id:
             continue
-        records.append(
-            PredictionRecord(
-                sample_id=payload["sample_id"],
-                system=payload["system"],
-                output=ClarifiedFunctionOutput.model_validate(payload["output"]),
-                raw_text=None,
-                json_valid=True,
-            )
-        )
+        records.append(PredictionRecord.model_validate(payload))
 
     reports: dict[str, dict[str, float]] = {}
     systems = sorted({record.system for record in records})
@@ -143,6 +139,21 @@ def load_baseline_reports(
         evaluations = evaluate_prediction_records(samples_by_id, system_records)
         reports[system] = build_report(f"baseline-{system}", evaluations).metrics
     return reports
+
+
+def enrich_comparison_metrics(
+    systems: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float]]:
+    raw_readability = systems.get("raw_ghidra", {}).get("readability_score")
+    if raw_readability is None:
+        return {name: dict(metrics) for name, metrics in systems.items()}
+    enriched: dict[str, dict[str, float]] = {}
+    for system_name, metrics in systems.items():
+        values = dict(metrics)
+        readability_score = values.get("readability_score", raw_readability)
+        values["readability_improvement"] = readability_score - raw_readability
+        enriched[system_name] = values
+    return enriched
 
 
 def _inspection_item(
@@ -321,17 +332,18 @@ def render_comparison_markdown(
         f"- split: `{split}`",
         f"- evaluated samples: `{sample_count}`",
         "",
-        "## Checkpoint Metrics",
+        "## Comparison Table",
         "",
     ]
-    lines.extend(f"- {name}: {value:.3f}" for name, value in report_metrics.items())
-    if baseline_metrics:
-        lines.extend(["", "## Baseline Comparison", ""])
-        for system, metrics in sorted(baseline_metrics.items()):
-            lines.append(f"### {system}")
-            lines.append("")
-            lines.extend(f"- {name}: {value:.3f}" for name, value in metrics.items())
-            lines.append("")
+    all_systems = enrich_comparison_metrics(
+        {f"{stage}_checkpoint": report_metrics, **baseline_metrics}
+    )
+    lines.append(render_comparison_table(all_systems))
+    lines.extend(["", "## Checkpoint Metrics", ""])
+    lines.extend(
+        f"- {name}: {value:.3f}"
+        for name, value in all_systems[f"{stage}_checkpoint"].items()
+    )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -389,6 +401,11 @@ def run_checkpoint_evaluation(
     )
 
     report = build_report(run_id, evaluations)
+    baseline_metrics = load_baseline_reports(paths, samples_by_id)
+    all_system_metrics = enrich_comparison_metrics(
+        {system: report.metrics, **baseline_metrics}
+    )
+    report.metrics = all_system_metrics[system]
     report.examples = [
         ReportExample(
             sample_id=sample.sample_id,
@@ -415,7 +432,9 @@ def run_checkpoint_evaluation(
     inspection_jsonl_path = run_dir / "inspection_samples.jsonl"
     write_inspection_samples(inspection_items, inspection_markdown_path, inspection_jsonl_path)
 
-    baseline_metrics = load_baseline_reports(paths, samples_by_id)
+    baseline_metrics = {
+        name: metrics for name, metrics in all_system_metrics.items() if name != system
+    }
     comparison_markdown_path = run_dir / "comparison.md"
     comparison_markdown_path.write_text(
         render_comparison_markdown(

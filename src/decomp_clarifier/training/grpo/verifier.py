@@ -23,7 +23,10 @@ class VerificationResult:
 
 
 def verify_output(
-    sample: FunctionDatasetSample, output: ClarifiedFunctionOutput
+    sample: FunctionDatasetSample,
+    output: ClarifiedFunctionOutput,
+    *,
+    json_valid: bool = True,
 ) -> VerificationResult:
     compile_success = compile_candidate(
         output.cleaned_c,
@@ -37,11 +40,15 @@ def verify_output(
         sample.target_clean_code,
     )
     return VerificationResult(
-        json_valid=True,
-        field_complete=field_complete(output),
+        json_valid=json_valid,
+        field_complete=field_complete(output) if json_valid else False,
         compile_success=compile_success,
-        behavior_success=behavior_success,
+        behavior_success=behavior_success if json_valid else False,
         readability_score=score_readability(output.cleaned_c),
-        naming_score=normalized_name_similarity(sample.rename_map_target, output.renamings),
+        naming_score=(
+            normalized_name_similarity(sample.rename_map_target, output.renamings)
+            if json_valid
+            else 0.0
+        ),
         placeholder_ratio=placeholder_ratio(output.cleaned_c),
     )

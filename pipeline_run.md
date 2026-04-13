@@ -28,7 +28,6 @@ What the repo can validate end to end today:
 
 What is not fully wired today:
 
-- `train-grpo` does not automatically consume the latest SFT checkpoint
 - hardware overlay configs under `configs/training/windows_cuda_*.yaml` are not auto-merged by the CLI
 - there is no single command that directly compares `SFT` vs `GRPO` in one combined report
 - checkpoint evaluation requires a finished checkpoint directory with saved adapter/model files
@@ -325,6 +324,27 @@ The three baseline systems are:
 - `naming_only`
 - `prompt_only_cleanup`
 
+Optional benchmark systems:
+
+- `generation_model`
+- `strong_model`
+- `base_qwen`
+
+If you want those extra systems in the baseline run:
+
+```powershell
+python -m decomp_clarifier.cli run-baselines `
+  --generation-model-id openai/gpt-5.4-mini `
+  --strong-model-id openai/gpt-5.4-xhigh `
+  --base-model-id Qwen/Qwen3.5-2B
+```
+
+Notes:
+
+- `generation_model` and `strong_model` require `OPENROUTER_API_KEY`
+- `base_qwen` requires the Windows CUDA local model path to be working
+- baseline prediction rows now include `json_valid` and `raw_text`
+
 ### 6. Evaluate Baselines
 
 ```powershell
@@ -441,21 +461,23 @@ Get-Content (Join-Path $latest.FullName 'inspection_samples.md') | Select-Object
 Success criteria:
 
 - `predictions.jsonl` and `sample_evaluations.jsonl` exist and are non-empty
-- `comparison.md` includes checkpoint metrics and, if available, latest baseline metrics
+- `comparison.md` renders a metric table with the checkpoint column and any available baseline columns
 - `inspection_samples.md` contains readable examples with source/decompiled/reconstructed sections
 - the checkpoint is at least competitive with `prompt_only_cleanup` on the held-out split
 
-### 8. Point GRPO at the SFT Checkpoint
+### 8. Confirm GRPO Base Checkpoint
 
-This is a manual step.
+`train-grpo` now defaults to the latest completed SFT checkpoint when the training profile leaves `model.base_model_id` unset.
 
-`train-grpo` does not automatically use the latest SFT output.
+Before running GRPO, verify what it will use:
 
-Before GRPO, create a temporary training profile or edit `configs/training/grpo_qwen35_2b_12gb.yaml` so:
+```powershell
+Get-Content configs\training\grpo_qwen35_2b_12gb.yaml
+```
 
-- `model.base_model_id` points at the SFT model directory
+If `model.base_model_id` is blank in that profile, the CLI will auto-resolve the latest finished `train-sft-*` run.
 
-Example value:
+If you want to override that behavior, set `model.base_model_id` explicitly in a custom profile:
 
 ```yaml
 model:
@@ -571,7 +593,7 @@ Get-Content (Join-Path $latest.FullName 'inspection_samples.md') | Select-Object
 Success criteria:
 
 - the GRPO eval artifacts are present and non-empty
-- `comparison.md` shows no obvious collapse versus the baseline reference
+- `comparison.md` shows a table with no obvious collapse versus the baseline reference
 - `inspection_samples.md` contains both good and bad examples you can inspect manually
 - GRPO is not materially worse than SFT on compile or behavior-oriented verifier fields
 
@@ -626,11 +648,12 @@ Recommended manual follow-up after both evaluations:
 2. open the latest `comparison.md` from the SFT eval run
 3. open the latest `comparison.md` from the GRPO eval run
 4. compare:
+   - json validity
    - compile success
    - behavior success
    - readability score
+   - readability improvement
    - naming score
-   - placeholder ratio
 5. read both `inspection_samples.md` files and compare the reconstructed code quality
 6. if the validation split looks good, rerun both checkpoint eval commands on `--split test` once
 
@@ -642,6 +665,7 @@ Important note:
   - baseline report from `eval`
   - SFT checkpoint report from `eval-sft-checkpoint`
   - GRPO checkpoint report from `eval-grpo-checkpoint`
+- checkpoint and baseline comparison tables now zero out behavior and naming credit for invalid-JSON outputs
 
 ## Short Command List
 

@@ -293,8 +293,16 @@ Checkpoint evaluation writes:
 - `predictions.jsonl`
 - `sample_evaluations.jsonl`
 - report markdown/html/json
-- `comparison.md` against the latest baseline run when available
+- `comparison.md` with a metric table against the latest baseline run when available
 - `inspection_samples.md` and `inspection_samples.jsonl` with original source, Ghidra decompilation, and reconstructed output
+
+`run-baselines` can now also benchmark optional comparator systems:
+
+- `--generation-model-id` for the model family used to generate training data
+- `--strong-model-id` for a stronger API reference
+- `--base-model-id` for a pre-fine-tune local model baseline such as `Qwen/Qwen3.5-2B`
+
+Baseline prediction JSONL now carries `json_valid` and `raw_text` so checkpoint and baseline comparisons can treat malformed outputs correctly. Invalid-JSON checkpoint samples now contribute `0.0` to behavior and naming metrics instead of leaking verifier wins through fallback text.
 
 Windows convenience wrappers:
 

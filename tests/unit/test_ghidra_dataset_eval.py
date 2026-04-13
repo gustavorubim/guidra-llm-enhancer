@@ -16,6 +16,7 @@ from decomp_clarifier.dataset.splitters import split_project_ids
 from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
 from decomp_clarifier.evaluation.checkpoint_eval import (
     evaluate_prediction_records,
+    load_baseline_reports,
     select_inspection_items,
     write_inspection_samples,
 )
@@ -23,7 +24,11 @@ from decomp_clarifier.evaluation.compile_eval import compile_candidate
 from decomp_clarifier.evaluation.metrics import aggregate_metric, field_complete, placeholder_ratio
 from decomp_clarifier.evaluation.naming_eval import normalized_name_similarity
 from decomp_clarifier.evaluation.readability_eval import readability_improvement, score_readability
-from decomp_clarifier.evaluation.report_builder import build_report, write_report
+from decomp_clarifier.evaluation.report_builder import (
+    build_report,
+    render_comparison_table,
+    write_report,
+)
 from decomp_clarifier.ghidra_export.aligner import align_functions, extract_source_functions
 from decomp_clarifier.ghidra_export.export_runner import GhidraExportRunner
 from decomp_clarifier.ghidra_export.parse_exports import (
@@ -230,6 +235,9 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     samples_by_id = {item.sample_id: item for item in sample_dataset_samples[:2]}
     evaluations = evaluate_prediction_records(samples_by_id, records)
     assert len(evaluations) == 2
+    assert evaluations[1].json_valid is False
+    assert evaluations[1].behavior_success is False
+    assert evaluations[1].naming_score == 0.0
     inspection_items = select_inspection_items(
         samples_by_id,
         records,
@@ -355,6 +363,39 @@ def test_checkpoint_eval_loader_rejects_duplicate_sample_ids(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="Duplicate sample_id"):
         load_dataset_split(dataset_path, split="val")
+
+
+def test_render_comparison_table_and_baseline_loader_backward_compat(
+    temp_paths, sample_dataset_samples
+) -> None:
+    samples_by_id = {sample.sample_id: sample for sample in sample_dataset_samples[:2]}
+    baseline_run = temp_paths.runs_dir / "baseline-compat"
+    baseline_run.mkdir(parents=True, exist_ok=True)
+    legacy_record = {
+        "sample_id": sample_dataset_samples[0].sample_id,
+        "system": "raw_ghidra",
+        "output": raw_ghidra.predict(sample_dataset_samples[0]).model_dump(mode="python"),
+    }
+    baseline_run.joinpath("baseline_predictions.jsonl").write_text(
+        json.dumps(legacy_record) + "\n",
+        encoding="utf-8",
+    )
+
+    baseline_metrics = load_baseline_reports(temp_paths, samples_by_id)
+
+    assert baseline_metrics["raw_ghidra"]["json_valid_rate"] == 1.0
+    table = render_comparison_table(
+        {
+            "raw_ghidra": baseline_metrics["raw_ghidra"],
+            "sft_checkpoint": {
+                "json_valid_rate": 0.5,
+                "compile_success_rate": 0.25,
+                "readability_score": 0.75,
+            },
+        }
+    )
+    assert "| Metric | raw_ghidra | sft_checkpoint |" in table
+    assert "| json_valid_rate | 1.000 | 0.500 |" in table
 
 
 def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:

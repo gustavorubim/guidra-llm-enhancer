@@ -36,6 +36,17 @@ def validate_checkpoint_dir(checkpoint_dir: Path) -> None:
         )
 
 
+def _local_model_dir(model_source: str | Path) -> Path | None:
+    if isinstance(model_source, Path):
+        return model_source
+    candidate = Path(model_source).expanduser()
+    if candidate.exists():
+        return candidate
+    if model_source.startswith((".", "~")) or candidate.is_absolute():
+        return candidate
+    return None
+
+
 def _text_tokenizer(tokenizer_or_processor: Any) -> Any:
     return getattr(tokenizer_or_processor, "tokenizer", tokenizer_or_processor)
 
@@ -49,24 +60,27 @@ def _encode_prompt(tokenizer_or_processor: Any, prompt: str) -> Any:
 class CheckpointPredictor:
     def __init__(
         self,
-        checkpoint_dir: Path,
+        checkpoint_dir: Path | str,
         config: TrainingConfig,
         *,
         prompt_formatter: Callable[[FunctionDatasetSample], str] = format_prompt,
     ) -> None:
         ensure_windows_cuda()
-        validate_checkpoint_dir(checkpoint_dir)
+        local_dir = _local_model_dir(checkpoint_dir)
+        if local_dir is not None:
+            validate_checkpoint_dir(local_dir)
 
         import torch  # type: ignore[import-not-found]
         import unsloth  # noqa: F401 - import before transformers-backed loader  # type: ignore[import-not-found]
         from unsloth import FastLanguageModel  # type: ignore[import-not-found]
 
         self._torch = torch
-        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_dir = local_dir if local_dir is not None else Path(str(checkpoint_dir))
+        self.model_source = str(local_dir if local_dir is not None else checkpoint_dir)
         self.prompt_formatter = prompt_formatter
         max_seq_length = config.training.max_seq_length or 512
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
-            model_name=str(checkpoint_dir),
+            model_name=self.model_source,
             max_seq_length=max_seq_length,
             load_in_4bit=bool(config.training.load_in_4bit),
             device_map="cuda:0",

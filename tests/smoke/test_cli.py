@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -190,6 +192,50 @@ def test_cli_workflow_smoke(
             }
         ),
     )
+
+    from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput, PredictionRecord
+
+    class DummyPromptBaseline:
+        def __init__(self, client, prompt_template, model):
+            self.model = model
+
+        def predict(self, sample):
+            return ClarifiedFunctionOutput(
+                summary=f"baseline:{self.model}",
+                confidence=0.5,
+                renamings={},
+                cleaned_c=sample.target_clean_code,
+            )
+
+    class DummyCheckpointPredictor:
+        def __init__(self, checkpoint_dir, config, prompt_formatter=None):
+            self.checkpoint_dir = checkpoint_dir
+
+        def predict(self, sample, *, system, max_new_tokens, temperature):
+            return PredictionRecord(
+                sample_id=sample.sample_id,
+                system=system,
+                output=ClarifiedFunctionOutput(
+                    summary="base model",
+                    confidence=0.4,
+                    renamings={},
+                    cleaned_c=sample.target_clean_code,
+                ),
+                raw_text='{"summary":"base model"}',
+                json_valid=True,
+            )
+
+    monkeypatch.setattr(cli_module, "PromptOnlyCleanupBaseline", DummyPromptBaseline)
+    monkeypatch.setitem(sys.modules, "unsloth", types.SimpleNamespace())
+    import decomp_clarifier.inference.checkpoint_predictor as checkpoint_predictor_module
+
+    monkeypatch.setattr(
+        checkpoint_predictor_module,
+        "CheckpointPredictor",
+        DummyCheckpointPredictor,
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
     monkeypatch.setattr(
         cli_module,
         "_run_sft_training",
@@ -292,7 +338,21 @@ def test_cli_workflow_smoke(
     assert runner.invoke(app, ["compile-projects"]).exit_code == 0
     assert runner.invoke(app, ["export-ghidra"]).exit_code == 0
     assert runner.invoke(app, ["build-dataset"]).exit_code == 0
-    assert runner.invoke(app, ["run-baselines"]).exit_code == 0
+    assert (
+        runner.invoke(
+            app,
+            [
+                "run-baselines",
+                "--generation-model-id",
+                "openai/gpt-5.4-mini",
+                "--strong-model-id",
+                "openai/gpt-5.4-xhigh",
+                "--base-model-id",
+                "Qwen/Qwen3.5-2B",
+            ],
+        ).exit_code
+        == 0
+    )
     assert runner.invoke(app, ["eval"]).exit_code == 0
     assert runner.invoke(app, ["report"]).exit_code == 0
     assert runner.invoke(app, ["demo"]).exit_code == 0
@@ -305,6 +365,12 @@ def test_cli_workflow_smoke(
         temp_paths.runs_dir.glob("baseline-*/baseline_predictions.jsonl")
     )[0]
     assert baseline_predictions.exists()
+    baseline_payload = baseline_predictions.read_text(encoding="utf-8")
+    assert '"system":"generation_model"' in baseline_payload
+    assert '"system":"strong_model"' in baseline_payload
+    assert '"system":"base_qwen"' in baseline_payload
+    assert '"json_valid":true' in baseline_payload
+    assert '"raw_text":"{\\"summary\\":\\"base model\\"}"' in baseline_payload
     assert (temp_paths.processed_rl_dir / "rl_records.jsonl").exists()
     report_file = sorted(temp_paths.reports_dir.glob("*.md"))[0]
     assert report_file.exists()

@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \"import sys, json; [print\\(json.dumps\\({k: \\(v[:200] if isinstance\\(v,str\\) else v\\) for k,v in json.loads\\(l\\).items\\(\\)}, indent=2\\)\\) for l in sys.stdin]\")"
+      "Bash(python -c \"import sys, json; [print\\(json.dumps\\({k: \\(v[:200] if isinstance\\(v,str\\) else v\\) for k,v in json.loads\\(l\\).items\\(\\)}, indent=2\\)\\) for l in sys.stdin]\")",
+      "Bash(gh api:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.datacamp.com)",
+      "WebFetch(domain:o-mega.ai)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('artifacts/reports/eval-20260411-185302.json', encoding='utf-8'\\)\\); print\\(json.dumps\\(d.get\\('metrics', d.get\\('summary', {}\\)\\), indent=2\\)\\)\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3:*)",
+      "Bash(ls:*)"
     ]
   }
 }
