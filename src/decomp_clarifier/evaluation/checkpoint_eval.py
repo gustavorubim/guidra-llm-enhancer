@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
 from decomp_clarifier.evaluation.readability_eval import readability_improvement
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
 from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
@@ -68,12 +69,16 @@ def load_dataset_split(
     dataset_path: Path, *, split: str, sample_limit: int | None = None
 ) -> list[FunctionDatasetSample]:
     samples: list[FunctionDatasetSample] = []
+    seen_ids: set[str] = set()
     for line in dataset_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         sample = FunctionDatasetSample.model_validate_json(line)
         if split != "all" and sample.split != split:
             continue
+        if sample.sample_id in seen_ids:
+            raise ValueError(f"Duplicate sample_id in dataset split: {sample.sample_id}")
+        seen_ids.add(sample.sample_id)
         samples.append(sample)
         if sample_limit is not None and len(samples) >= sample_limit:
             break
@@ -353,7 +358,12 @@ def run_checkpoint_evaluation(
         raise ValueError(f"No dataset samples found for split '{split}'.")
     samples_by_id = {sample.sample_id: sample for sample in samples}
 
-    predictor = CheckpointPredictor(checkpoint_dir, config)
+    prompt_formatter = format_rl_prompt if stage == "grpo" else format_prompt
+    predictor = CheckpointPredictor(
+        checkpoint_dir,
+        config,
+        prompt_formatter=prompt_formatter,
+    )
     system = f"{stage}_checkpoint"
     records = [
         predictor.predict(

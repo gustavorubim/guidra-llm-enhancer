@@ -45,7 +45,11 @@ def build_function_dataset(
             for task_type in task_types:
                 sample = FunctionDatasetSample(
                     sample_id=hashlib.sha256(
-                        f"{project.project_id}:{aligned.source.name}:{task_type}:{compile_manifest.opt_level}:{compile_manifest.compiler_family}".encode()
+                        (
+                            f"{project.project_id}:{aligned.source.file_path}:"
+                            f"{aligned.source.name}:{task_type}:"
+                            f"{compile_manifest.opt_level}:{compile_manifest.compiler_family}"
+                        ).encode()
                     ).hexdigest()[:16],
                     project_id=project.project_id,
                     split=split_map[project.project_id],

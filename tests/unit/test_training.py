@@ -176,6 +176,7 @@ def test_training_utilities_and_rewards(
     populated_fields = reward_fields_from_record(
         {
             "prompt": "p",
+            "source_function_name": "helper",
             "raw_code": "raw",
             "compile_reference_source": "#include <stdio.h>\nint helper(void) { return 0; }\n",
             "target_clean_code": "int helper(void) { return 0; }",
@@ -184,6 +185,7 @@ def test_training_utilities_and_rewards(
             "allowed_callees": '["printf"]',
         }
     )
+    assert populated_fields["source_function_name"] == "helper"
     assert populated_fields["compile_reference_source"].startswith("#include <stdio.h>")
 
     assert behavior_similarity("int helper(void) { return 0; }", "") == 0.0
@@ -192,6 +194,7 @@ def test_training_utilities_and_rewards(
             '{"summary":"ok","confidence":1.0,"renamings":{},'
             '"cleaned_c":"int helper(void){ printf(\\"hi\\\\n\\"); return 0; }"}'
         ),
+        source_function_name="helper",
         raw_code='int helper(void){ undefined8 local_10; printf("hi\\n"); return 0; }',
         compile_reference_source='#include <stdio.h>\nint helper(void) { return 0; }\n',
         target_clean_code="int helper(void) { return 0; }",
@@ -215,6 +218,7 @@ def test_training_utilities_and_rewards(
             '{"summary":"x","confidence":0.5,"renamings":{},'
             '"cleaned_c":"int f(void){return 0;}"}'
         ),
+        source_function_name="f",
         raw_code="",
         compile_reference_source="",
         target_clean_code="",
@@ -406,6 +410,7 @@ def test_run_training_wrappers_with_fake_modules(
             if reward_funcs:
                 reward_funcs[0](
                     ["test completion"],
+                    source_function_name=["helper"],
                     raw_code=["int uVar3(void){ int local_10; return local_10; }"],
                     compile_reference_source=["int helper(void) { return 0; }"],
                     target_clean_code=["int helper(void) { return 0; }"],

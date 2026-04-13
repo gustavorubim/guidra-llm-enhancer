@@ -19,6 +19,7 @@ def prompt_from_record(record: dict[str, Any]) -> str:
 
 def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
+        "source_function_name": record.get("source_function_name", ""),
         "raw_code": record.get("raw_code", ""),
         "compile_reference_source": record.get(
             "compile_reference_source", record.get("target_clean_code", "")

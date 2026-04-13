@@ -26,7 +26,9 @@ def verify_output(
     sample: FunctionDatasetSample, output: ClarifiedFunctionOutput
 ) -> VerificationResult:
     compile_success = compile_candidate(
-        output.cleaned_c, sample.compile_reference_source or sample.source_code
+        output.cleaned_c,
+        sample.compile_reference_source or sample.source_code,
+        function_name=sample.source_function_name,
     )
     behavior_score = behavior_similarity(output.cleaned_c, sample.target_clean_code)
     behavior_success = behavior_score >= 0.35 and is_behavior_improvement(

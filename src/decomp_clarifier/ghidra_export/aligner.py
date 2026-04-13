@@ -1,11 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from decomp_clarifier.c_source import (
-    function_name_from_signature_line,
-    looks_like_function_signature_line,
-)
+from decomp_clarifier.c_source import iter_function_starts, slice_function
 from decomp_clarifier.ghidra_export.parse_exports import ParsedGhidraProject
 from decomp_clarifier.schemas.generation import GeneratedProject
 from decomp_clarifier.schemas.ghidra import GhidraFunctionRow
@@ -25,53 +23,31 @@ class AlignedFunction:
     ghidra: GhidraFunctionRow
 
 
-def _slice_function(content: str, start_index: int) -> str:
-    brace_index = content.find("{", start_index)
-    if brace_index == -1:
-        return ""
-    depth = 0
-    for index in range(brace_index, len(content)):
-        character = content[index]
-        if character == "{":
-            depth += 1
-        elif character == "}":
-            depth -= 1
-            if depth == 0:
-                return content[start_index : index + 1]
-    return content[start_index:]
+def _ghidra_row_score(function: GhidraFunctionRow) -> tuple[int, int, int, int, int, str]:
+    return (
+        function.instruction_count,
+        function.basic_block_count,
+        len(function.callees),
+        len(function.callers),
+        len(function.decompiled_text),
+        function.function_address,
+    )
 
 
-def _iter_function_starts(content: str) -> list[tuple[int, str]]:
-    lines = content.splitlines(keepends=True)
-    offsets: list[int] = []
-    offset = 0
-    for line in lines:
-        offsets.append(offset)
-        offset += len(line)
-
-    starts: list[tuple[int, str]] = []
-    for index, line in enumerate(lines):
-        stripped = line.rstrip("\r\n").strip()
-        if not stripped or stripped.startswith(("#", "//", "/*", "*", "*/")):
+def select_best_ghidra_rows(
+    functions: Iterable[GhidraFunctionRow], source_names: set[str]
+) -> list[GhidraFunctionRow]:
+    best_by_name: dict[str, GhidraFunctionRow] = {}
+    passthrough: list[GhidraFunctionRow] = []
+    for function in functions:
+        name = function.ghidra_function_name
+        if name not in source_names:
+            passthrough.append(function)
             continue
-        candidate = stripped
-        if not looks_like_function_signature_line(candidate) and "(" in stripped:
-            candidate_parts = [stripped]
-            for lookahead in range(index + 1, len(lines)):
-                next_part = lines[lookahead].rstrip("\r\n").strip()
-                if not next_part:
-                    break
-                candidate_parts.append(next_part)
-                candidate = " ".join(part for part in candidate_parts if part)
-                if "{" in next_part or ";" in next_part:
-                    break
-        if not looks_like_function_signature_line(candidate):
-            continue
-        name = function_name_from_signature_line(candidate)
-        if name is None:
-            continue
-        starts.append((offsets[index], name))
-    return starts
+        current = best_by_name.get(name)
+        if current is None or _ghidra_row_score(function) > _ghidra_row_score(current):
+            best_by_name[name] = function
+    return [*best_by_name.values(), *passthrough]
 
 
 def extract_source_functions(project: GeneratedProject) -> list[SourceFunction]:
@@ -80,8 +56,8 @@ def extract_source_functions(project: GeneratedProject) -> list[SourceFunction]:
     for file in project.files:
         if not file.path.endswith(".c"):
             continue
-        for start_index, name in _iter_function_starts(file.content):
-            code = _slice_function(file.content, start_index).strip()
+        for start_index, name in iter_function_starts(file.content):
+            code = slice_function(file.content, start_index).strip()
             functions.append(
                 SourceFunction(file_path=file.path, name=name, code=code, order_index=order)
             )
@@ -93,20 +69,25 @@ def align_functions(
     project: GeneratedProject, parsed_project: ParsedGhidraProject
 ) -> list[AlignedFunction]:
     source_functions = extract_source_functions(project)
-    by_name = {function.name: function for function in source_functions}
+    source_names = {function.name for function in source_functions}
+    ghidra_functions = select_best_ghidra_rows(parsed_project.functions, source_names)
+    by_name: dict[str, list[SourceFunction]] = {}
+    for function in source_functions:
+        by_name.setdefault(function.name, []).append(function)
     aligned: list[AlignedFunction] = []
-    used_names: set[str] = set()
+    used_indices: set[int] = set()
     remaining_ghidra: list[GhidraFunctionRow] = []
-    for function in parsed_project.functions:
-        source = by_name.get(function.ghidra_function_name)
-        if source is None:
+    for function in ghidra_functions:
+        candidates = by_name.get(function.ghidra_function_name)
+        if not candidates:
             remaining_ghidra.append(function)
             continue
+        source = candidates.pop(0)
         aligned.append(AlignedFunction(source=source, ghidra=function))
-        used_names.add(source.name)
+        used_indices.add(source.order_index)
 
     remaining_source = [
-        function for function in source_functions if function.name not in used_names
+        function for function in source_functions if function.order_index not in used_indices
     ]
     for source, ghidra in zip(remaining_source, remaining_ghidra, strict=False):
         aligned.append(AlignedFunction(source=source, ghidra=ghidra))

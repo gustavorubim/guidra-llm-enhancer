@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +47,13 @@ def _encode_prompt(tokenizer_or_processor: Any, prompt: str) -> Any:
 
 
 class CheckpointPredictor:
-    def __init__(self, checkpoint_dir: Path, config: TrainingConfig) -> None:
+    def __init__(
+        self,
+        checkpoint_dir: Path,
+        config: TrainingConfig,
+        *,
+        prompt_formatter: Callable[[FunctionDatasetSample], str] = format_prompt,
+    ) -> None:
         ensure_windows_cuda()
         validate_checkpoint_dir(checkpoint_dir)
 
@@ -56,6 +63,7 @@ class CheckpointPredictor:
 
         self._torch = torch
         self.checkpoint_dir = checkpoint_dir
+        self.prompt_formatter = prompt_formatter
         max_seq_length = config.training.max_seq_length or 512
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=str(checkpoint_dir),
@@ -76,7 +84,7 @@ class CheckpointPredictor:
         max_new_tokens: int,
         temperature: float,
     ) -> PredictionRecord:
-        prompt = f"{format_prompt(sample)}\n\n"
+        prompt = f"{self.prompt_formatter(sample)}\n\n"
         inputs = _encode_prompt(self.tokenizer, prompt)
         inputs = {name: value.to("cuda:0") for name, value in inputs.items()}
 

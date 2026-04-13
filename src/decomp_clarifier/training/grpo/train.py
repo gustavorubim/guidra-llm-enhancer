@@ -41,6 +41,7 @@ def _mean(values: list[float]) -> float:
 
 def compute_completion_reward(
     completion: str,
+    source_function_name: str,
     raw_code: str,
     compile_reference_source: str,
     target_clean_code: str,
@@ -52,6 +53,7 @@ def compute_completion_reward(
 ) -> float:
     return compute_completion_reward_details(
         completion=completion,
+        source_function_name=source_function_name,
         raw_code=raw_code,
         compile_reference_source=compile_reference_source,
         target_clean_code=target_clean_code,
@@ -65,6 +67,7 @@ def compute_completion_reward(
 
 def compute_completion_reward_details(
     completion: str,
+    source_function_name: str,
     raw_code: str,
     compile_reference_source: str,
     target_clean_code: str,
@@ -92,7 +95,9 @@ def compute_completion_reward_details(
         imports: list[str] = json.loads(allowed_imports_json)
         callees: list[str] = json.loads(allowed_callees_json)
         compile_success = compile_candidate(
-            output.cleaned_c, compile_reference_source or target_clean_code
+            output.cleaned_c,
+            compile_reference_source or target_clean_code,
+            function_name=source_function_name or None,
         )
         behavior_score = behavior_similarity(output.cleaned_c, target_clean_code)
         behavior_success = behavior_score >= behavior_threshold and is_behavior_improvement(
@@ -192,6 +197,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
 
     def reward_func(
         completions: list[str],
+        source_function_name: list[str] | None = None,
         *,
         raw_code: list[str] | None = None,
         compile_reference_source: list[str] | None = None,
@@ -203,6 +209,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     ) -> list[float]:
         nonlocal reward_step
         n = len(completions)
+        function_names = source_function_name or [""] * n
         raw_codes = raw_code or [""] * n
         compile_sources = compile_reference_source or [""] * n
         target_codes = target_clean_code or [""] * n
@@ -212,6 +219,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         details = [
             compute_completion_reward_details(
                 completion=completion,
+                source_function_name=function_names[index % len(function_names)],
                 raw_code=raw_codes[index % len(raw_codes)],
                 compile_reference_source=compile_sources[index % len(compile_sources)],
                 target_clean_code=target_codes[index % len(target_codes)],

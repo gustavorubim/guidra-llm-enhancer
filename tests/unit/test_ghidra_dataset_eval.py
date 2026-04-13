@@ -11,6 +11,7 @@ from decomp_clarifier.baselines import naming_only, raw_ghidra
 from decomp_clarifier.baselines.simple_llm_cleanup import heuristic_cleanup
 from decomp_clarifier.compilation.binary_inventory import binary_format_for_host
 from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
+from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
 from decomp_clarifier.dataset.splitters import split_project_ids
 from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
 from decomp_clarifier.evaluation.checkpoint_eval import (
@@ -25,7 +26,10 @@ from decomp_clarifier.evaluation.readability_eval import readability_improvement
 from decomp_clarifier.evaluation.report_builder import build_report, write_report
 from decomp_clarifier.ghidra_export.aligner import align_functions, extract_source_functions
 from decomp_clarifier.ghidra_export.export_runner import GhidraExportRunner
-from decomp_clarifier.ghidra_export.parse_exports import parse_ghidra_export_dir
+from decomp_clarifier.ghidra_export.parse_exports import (
+    ParsedGhidraProject,
+    parse_ghidra_export_dir,
+)
 from decomp_clarifier.inference.checkpoint_predictor import _encode_prompt, _text_tokenizer
 from decomp_clarifier.inference.explain import summarize_improvements
 from decomp_clarifier.inference.formatter import normalize_output, normalize_output_with_status
@@ -33,6 +37,7 @@ from decomp_clarifier.inference.runner import InferenceRunner
 from decomp_clarifier.logging import configure_logging
 from decomp_clarifier.schemas.compiler import BinaryArtifact, CompileManifest
 from decomp_clarifier.schemas.evaluation import SampleEvaluation
+from decomp_clarifier.schemas.ghidra import GhidraFunctionRow
 from decomp_clarifier.schemas.model_io import PredictionRecord
 
 
@@ -99,9 +104,12 @@ def test_parse_exports_align_dataset_and_export_runner(
     assert set(manifest.task_counts) == {"full_clarify", "cleanup", "rename"}
     rl_records = pack_rl_records(sample_dataset_samples)
     assert len(rl_records) == len(sample_dataset_samples)
+    assert rl_records[0].source_function_name == sample_dataset_samples[0].source_function_name
     assert rl_records[0].raw_code == sample_dataset_samples[0].ghidra_decompiled_code
     assert "#include <stdio.h>" in rl_records[0].compile_reference_source
     assert "strlen" in rl_records[0].allowed_callees
+    assert "Assembly:" not in rl_records[0].prompt
+    assert "Decompiler:" in rl_records[0].prompt
 
     class FakeAdapter:
         def run(self, *, binary_path, output_dir, project_name):
@@ -164,6 +172,14 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     compiler_available = resolve_clang_executable("clang") is not None
     assert (
         compile_candidate("int helper(void) { return 1; }", "int helper(void) { return 1; }")
+        == compiler_available
+    )
+    assert (
+        compile_candidate(
+            sample.target_clean_code,
+            sample.compile_reference_source or sample.source_code,
+            function_name=sample.source_function_name,
+        )
         == compiler_available
     )
 
@@ -262,6 +278,85 @@ int tokenize(const char *text) {
     assert functions[0].code.startswith("int tokenize(")
 
 
+def test_align_functions_prefers_best_ghidra_row_for_duplicate_names(
+    sample_project, sample_parsed_ghidra_project
+) -> None:
+    duplicate = GhidraFunctionRow.model_validate(
+        sample_parsed_ghidra_project.functions[0].model_dump(mode="python")
+        | {
+            "function_address": "140000001",
+            "instruction_count": 1,
+            "basic_block_count": 1,
+            "callees": [],
+            "callers": ["main"],
+            "decompiled_text": "int helper(int param_1) { return helper(param_1); }",
+        }
+    )
+    preferred = GhidraFunctionRow.model_validate(
+        sample_parsed_ghidra_project.functions[0].model_dump(mode="python")
+        | {
+            "function_address": "140000999",
+            "instruction_count": 42,
+            "basic_block_count": 7,
+        }
+    )
+    parsed = ParsedGhidraProject(
+        manifest=sample_parsed_ghidra_project.manifest,
+        functions=[
+            duplicate,
+            preferred,
+            *sample_parsed_ghidra_project.functions[1:],
+        ],
+    )
+
+    aligned = align_functions(sample_project, parsed)
+    helper_matches = [
+        item for item in aligned if item.source.name == preferred.ghidra_function_name
+    ]
+
+    assert len(aligned) == 3
+    assert len(helper_matches) == 1
+    assert helper_matches[0].ghidra.function_address == preferred.function_address
+
+
+def test_checkpoint_eval_loader_rejects_duplicate_sample_ids(tmp_path: Path) -> None:
+    duplicate_row = {
+        "sample_id": "dup",
+        "project_id": "project",
+        "split": "val",
+        "task_type": "full_clarify",
+        "host_os": "windows",
+        "compiler": "clang",
+        "opt_level": "O0",
+        "binary_format": "pe",
+        "source_function_name": "helper",
+        "source_code": "int helper(void) { return 0; }",
+        "compile_reference_source": "int helper(void) { return 0; }",
+        "target_clean_code": "int helper(void) { return 0; }",
+        "ghidra_function_name": "helper",
+        "ghidra_decompiled_code": "int helper(void) { return 0; }",
+        "assembly": "nop",
+        "strings": [],
+        "imports": [],
+        "callers": [],
+        "callees": [],
+        "semantic_summary": "helper",
+        "rename_map_target": {},
+        "tests_ref": None,
+        "difficulty": "easy",
+    }
+    dataset_path = tmp_path / "function_dataset.jsonl"
+    dataset_path.write_text(
+        "\n".join(json.dumps(duplicate_row) for _ in range(2)) + "\n",
+        encoding="utf-8",
+    )
+
+    from decomp_clarifier.evaluation.checkpoint_eval import load_dataset_split
+
+    with pytest.raises(ValueError, match="Duplicate sample_id"):
+        load_dataset_split(dataset_path, split="val")
+
+
 def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:
     class FakeTokenizer:
         pad_token = None
@@ -288,6 +383,16 @@ def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:
     assert _text_tokenizer(processor) is processor.tokenizer
     assert _encode_prompt(tokenizer, "hello") == {"input_ids": "plain"}
     assert _encode_prompt(processor, "hello") == {"input_ids": "processor"}
+
+
+def test_rl_prompt_is_compact_relative_to_sft_prompt(sample_dataset_samples) -> None:
+    sample = sample_dataset_samples[0]
+    sft_prompt = format_prompt(sample)
+    rl_prompt = format_rl_prompt(sample)
+
+    assert "Assembly:" in sft_prompt
+    assert "Assembly:" not in rl_prompt
+    assert len(rl_prompt) < len(sft_prompt)
 
 
 def test_logging_splitters_and_inventory_branches(tmp_path: Path, monkeypatch) -> None:

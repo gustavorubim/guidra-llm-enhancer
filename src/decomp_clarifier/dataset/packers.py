@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from decomp_clarifier.c_source import extract_called_functions
-from decomp_clarifier.dataset.prompt_formatter import format_prompt
+from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
 from decomp_clarifier.schemas.dataset import (
     DatasetManifest,
     FunctionDatasetSample,
@@ -46,7 +46,8 @@ def pack_rl_records(samples: list[FunctionDatasetSample]) -> list[PackedRLRecord
         PackedRLRecord(
             sample_id=sample.sample_id,
             task_type=sample.task_type,
-            prompt=format_prompt(sample),
+            prompt=format_rl_prompt(sample),
+            source_function_name=sample.source_function_name,
             raw_code=sample.ghidra_decompiled_code,
             compile_reference_source=sample.compile_reference_source or sample.source_code,
             target_clean_code=sample.target_clean_code,
