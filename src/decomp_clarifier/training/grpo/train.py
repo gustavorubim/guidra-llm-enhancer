@@ -21,7 +21,10 @@ from decomp_clarifier.training.utils.trl_compat import (
     patch_trl_optional_availability,
 )
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
-from decomp_clarifier.training.windows_guard import ensure_windows_cuda
+from decomp_clarifier.training.windows_guard import (
+    ensure_windows_cuda,
+    prepare_model_runtime_environment,
+)
 
 _BEHAVIOR_THRESHOLD = 0.35
 
@@ -141,6 +144,7 @@ def compute_completion_reward_details(
 def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
     logger = logging.getLogger("decomp_clarifier")
     ensure_windows_cuda()
+    prepare_model_runtime_environment()
     versions = validate_version_lock()
     hardware = detect_hardware()
     telemetry = TrainingTelemetry("grpo", output_dir)

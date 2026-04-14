@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import types
 from contextlib import suppress
@@ -58,6 +59,7 @@ from decomp_clarifier.training.utils.version_lock import (
 from decomp_clarifier.training.windows_guard import (
     TrainingEnvironmentError,
     ensure_windows_cuda,
+    prepare_model_runtime_environment,
 )
 
 _ORIGINAL_METADATA_VERSION = importlib_metadata.version
@@ -218,6 +220,35 @@ def test_training_utilities_and_rewards(
     assert populated_fields["compile_reference_source"].startswith("#include <stdio.h>")
 
     assert behavior_similarity("int helper(void) { return 0; }", "") == 0.0
+
+
+def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
+    monkeypatch, tmp_path: Path
+) -> None:
+    missing_file = tmp_path / "missing-cert.pem"
+    missing_dir = tmp_path / "missing-certs"
+    existing_file = tmp_path / "existing-cert.pem"
+    existing_dir = tmp_path / "existing-certs"
+    existing_file.write_text("dummy", encoding="utf-8")
+    existing_dir.mkdir()
+
+    monkeypatch.setenv("SSL_CERT_FILE", str(missing_file))
+    monkeypatch.setenv("SSL_CERT_DIR", str(missing_dir))
+    monkeypatch.delenv("UNSLOTH_DISABLE_STATISTICS", raising=False)
+
+    prepare_model_runtime_environment()
+
+    assert "SSL_CERT_FILE" not in os.environ
+    assert "SSL_CERT_DIR" not in os.environ
+    assert os.environ["UNSLOTH_DISABLE_STATISTICS"] == "1"
+
+    monkeypatch.setenv("SSL_CERT_FILE", str(existing_file))
+    monkeypatch.setenv("SSL_CERT_DIR", str(existing_dir))
+
+    prepare_model_runtime_environment()
+
+    assert os.environ["SSL_CERT_FILE"] == str(existing_file)
+    assert os.environ["SSL_CERT_DIR"] == str(existing_dir)
     compile_only_reward = compute_completion_reward(
         completion=(
             '{"summary":"ok","confidence":1.0,"renamings":{},'

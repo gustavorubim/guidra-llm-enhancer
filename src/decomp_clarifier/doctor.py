@@ -13,7 +13,11 @@ from decomp_clarifier.paths import ProjectPaths
 from decomp_clarifier.settings import load_compile_config, load_ghidra_config
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.version_lock import collect_versions, validate_version_lock
-from decomp_clarifier.training.windows_guard import TrainingEnvironmentError, ensure_windows_cuda
+from decomp_clarifier.training.windows_guard import (
+    TrainingEnvironmentError,
+    ensure_windows_cuda,
+    prepare_model_runtime_environment,
+)
 
 
 def _tail(text: str) -> str | None:
@@ -22,7 +26,7 @@ def _tail(text: str) -> str | None:
 
 
 def _repo_pythonpath_env(root: Path) -> dict[str, str]:
-    env = dict(os.environ)
+    env = prepare_model_runtime_environment(dict(os.environ))
     repo_src = str(root / "src")
     current = env.get("PYTHONPATH")
     env["PYTHONPATH"] = repo_src if not current else repo_src + os.pathsep + current

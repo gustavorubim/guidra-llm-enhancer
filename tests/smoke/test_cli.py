@@ -29,6 +29,9 @@ def test_cli_workflow_smoke(
     test_logger,
 ) -> None:
     from decomp_clarifier import cli as cli_module
+    from decomp_clarifier.baselines.openrouter_structured import (
+        OpenRouterStructuredBaselinePredictor,
+    )
     from decomp_clarifier.schemas.compiler import BinaryArtifact, CompileManifest
     from decomp_clarifier.schemas.dataset import DatasetManifest
     from decomp_clarifier.settings import DatasetConfig, GenerationConfig, TrainingConfig
@@ -225,7 +228,38 @@ def test_cli_workflow_smoke(
                 json_valid=True,
             )
 
+    class DummyOpenRouterStructuredBaselinePredictor(OpenRouterStructuredBaselinePredictor):
+        def __init__(
+            self,
+            *,
+            client,
+            model,
+            prompt_formatter,
+            fallback_predictor=None,
+            schema_version,
+        ):
+            self.model = model
+
+        def predict(self, sample, *, system, max_new_tokens, temperature):
+            return PredictionRecord(
+                sample_id=sample.sample_id,
+                system=system,
+                output=ClarifiedFunctionOutput(
+                    summary=f"remote base model:{self.model}",
+                    confidence=0.4,
+                    renamings={},
+                    cleaned_c=sample.target_clean_code,
+                ),
+                raw_text='{"summary":"remote base model"}',
+                json_valid=True,
+            )
+
     monkeypatch.setattr(cli_module, "PromptOnlyCleanupBaseline", DummyPromptBaseline)
+    monkeypatch.setattr(
+        cli_module,
+        "OpenRouterStructuredBaselinePredictor",
+        DummyOpenRouterStructuredBaselinePredictor,
+    )
     monkeypatch.setitem(sys.modules, "unsloth", types.SimpleNamespace())
     import decomp_clarifier.inference.checkpoint_predictor as checkpoint_predictor_module
 
@@ -368,9 +402,10 @@ def test_cli_workflow_smoke(
     baseline_payload = baseline_predictions.read_text(encoding="utf-8")
     assert '"system":"generation_model"' in baseline_payload
     assert '"system":"strong_model"' in baseline_payload
-    assert '"system":"base_qwen"' in baseline_payload
+    assert '"system":"base_qwen_openrouter"' in baseline_payload
+    assert '"system":"base_qwen"' not in baseline_payload
     assert '"json_valid":true' in baseline_payload
-    assert '"raw_text":"{\\"summary\\":\\"base model\\"}"' in baseline_payload
+    assert '"raw_text":"{\\"summary\\":\\"remote base model\\"}"' in baseline_payload
     assert (temp_paths.processed_rl_dir / "rl_records.jsonl").exists()
     report_file = sorted(temp_paths.reports_dir.glob("*.md"))[0]
     assert report_file.exists()

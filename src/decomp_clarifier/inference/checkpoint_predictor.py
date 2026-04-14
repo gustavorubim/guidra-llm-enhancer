@@ -9,7 +9,10 @@ from decomp_clarifier.inference.formatter import normalize_output_with_status
 from decomp_clarifier.schemas.dataset import FunctionDatasetSample
 from decomp_clarifier.schemas.model_io import PredictionRecord
 from decomp_clarifier.settings import TrainingConfig
-from decomp_clarifier.training.windows_guard import ensure_windows_cuda
+from decomp_clarifier.training.windows_guard import (
+    ensure_windows_cuda,
+    prepare_model_runtime_environment,
+)
 
 
 def _checkpoint_has_model_artifacts(checkpoint_dir: Path) -> bool:
@@ -66,6 +69,7 @@ class CheckpointPredictor:
         prompt_formatter: Callable[[FunctionDatasetSample], str] = format_prompt,
     ) -> None:
         ensure_windows_cuda()
+        prepare_model_runtime_environment()
         local_dir = _local_model_dir(checkpoint_dir)
         if local_dir is not None:
             validate_checkpoint_dir(local_dir)

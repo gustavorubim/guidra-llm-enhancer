@@ -74,20 +74,22 @@ def test_build_target_comparison_systems_and_render_table() -> None:
 
     assert list(systems) == TARGET_COLUMNS
     assert systems["base_qwen"] == {}
+    assert systems["base_qwen_openrouter"] == {}
 
     table = render_target_comparison_table(systems)
 
     assert (
         table.splitlines()[0]
-        == "| Metric | raw_ghidra | naming_only | base_qwen | sft | grpo | "
+        == "| Metric | raw_ghidra | naming_only | base_qwen | base_qwen_openrouter | sft | grpo | "
         "prompt_only_cleanup | generation_model | strong_model |"
     )
     assert (
-        "| json_valid_rate | 1.000 | 1.000 | -- | 0.900 | 0.880 | 1.000 | 1.000 | 1.000 |"
+        "| json_valid_rate | 1.000 | 1.000 | -- | -- | 0.900 | 0.880 | 1.000 | 1.000 | 1.000 |"
         in table
     )
     assert (
-        "| behavior_success_rate | 0.000 | 0.000 | -- | 0.900 | 0.870 | 0.360 | 0.000 | 0.000 |"
+        "| behavior_success_rate | 0.000 | 0.000 | -- | -- | "
+        "0.900 | 0.870 | 0.360 | 0.000 | 0.000 |"
         in table
     )
 

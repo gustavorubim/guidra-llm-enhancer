@@ -8,6 +8,7 @@ TARGET_COLUMNS = [
     "raw_ghidra",
     "naming_only",
     "base_qwen",
+    "base_qwen_openrouter",
     "sft",
     "grpo",
     "prompt_only_cleanup",

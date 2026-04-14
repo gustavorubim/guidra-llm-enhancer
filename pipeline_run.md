@@ -319,7 +319,7 @@ $path
 Success criteria:
 
 - `baseline_predictions.jsonl` exists
-- it contains `3 * function_dataset_rows` lines
+- it contains `active_baseline_system_count * function_dataset_rows` lines
 
 The three baseline systems are:
 
@@ -331,7 +331,8 @@ Optional benchmark systems:
 
 - `generation_model`
 - `strong_model`
-- `base_qwen`
+- `base_qwen_openrouter`
+- `base_qwen` when `--base-model-local-id` is set
 
 If you want those extra systems in the baseline run:
 
@@ -342,10 +343,21 @@ python -m decomp_clarifier.cli run-baselines `
   --base-model-id Qwen/Qwen3.5-2B
 ```
 
+To also run the local Windows CUDA base model comparison:
+
+```powershell
+python -m decomp_clarifier.cli run-baselines `
+  --generation-model-id openai/gpt-5.4-mini `
+  --strong-model-id openai/gpt-5.4-xhigh `
+  --base-model-id Qwen/Qwen3.5-2B `
+  --base-model-local-id Qwen/Qwen3.5-2B
+```
+
 Notes:
 
 - `generation_model` and `strong_model` require `OPENROUTER_API_KEY`
-- `base_qwen` requires the Windows CUDA local model path to be working
+- `base_qwen_openrouter` uses the RL prompt over OpenRouter and defaults to the same model id passed to `--base-model-id`; use `--base-model-openrouter-id` to override it
+- `base_qwen` is local-only and runs only when `--base-model-local-id` is provided
 - baseline prediction rows now include `json_valid` and `raw_text`
 
 ### 6. Evaluate Baselines

@@ -6,6 +6,7 @@ import httpx
 import pytest
 import yaml
 
+import decomp_clarifier.adapters.openrouter_client as openrouter_client_module
 from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 from decomp_clarifier.adapters.openrouter_client import (
     OpenRouterClient,
@@ -237,6 +238,32 @@ def test_openrouter_error_paths_and_prompt_helpers(tmp_path: Path) -> None:
             temperature=0.1,
             response_schema=None,
         )
+
+
+def test_openrouter_client_recovers_from_broken_cert_env(tmp_path: Path, monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    class DummyClient:
+        pass
+
+    def fake_client(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise FileNotFoundError("missing cert bundle")
+        return DummyClient()
+
+    monkeypatch.setattr(openrouter_client_module.httpx, "Client", fake_client)
+
+    client = OpenRouterClient(
+        api_key="token",
+        base_url="https://example.com",
+        cache=FilesystemCache(tmp_path / "cache"),
+    )
+
+    assert isinstance(client._client, DummyClient)
+    assert "verify" not in calls[0]
+    ssl_context_type = type(openrouter_client_module.ssl.create_default_context())
+    assert isinstance(calls[1]["verify"], ssl_context_type)
 
 
 def test_openrouter_schema_rejection_retries_without_response_format(tmp_path: Path) -> None:

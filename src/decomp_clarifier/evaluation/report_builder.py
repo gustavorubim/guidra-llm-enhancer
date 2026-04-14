@@ -10,6 +10,7 @@ _COLUMN_ORDER = [
     "raw_ghidra",
     "naming_only",
     "base_qwen",
+    "base_qwen_openrouter",
     "sft_checkpoint",
     "grpo_checkpoint",
     "prompt_only_cleanup",

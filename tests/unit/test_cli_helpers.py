@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import types
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,7 @@ from decomp_clarifier.schemas.compiler import (
 from decomp_clarifier.schemas.compiler import (
     TestExecutionResult as CompilerTestExecutionResult,
 )
+from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput, PredictionRecord
 from decomp_clarifier.settings import GenerationConfig
 
 
@@ -234,3 +237,89 @@ def test_generate_projects_repairs_before_quarantine(
     assert '"generated_count": 1' in payload
     assert '"repaired_count": 1' in payload
     assert '"quarantined_count": 0' in payload
+
+
+def test_base_qwen_logs_every_completion(caplog) -> None:
+    samples = [
+        types.SimpleNamespace(sample_id="sample-1"),
+        types.SimpleNamespace(sample_id="sample-2"),
+        types.SimpleNamespace(sample_id="sample-3"),
+    ]
+
+    class DummyPredictor:
+        def predict(
+            self,
+            sample,
+            *,
+            system: str,
+            max_new_tokens: int,
+            temperature: float,
+        ) -> PredictionRecord:
+            assert system == "base_qwen"
+            assert max_new_tokens == 128
+            assert temperature == 0.0
+            return PredictionRecord(
+                sample_id=sample.sample_id,
+                system=system,
+                output=ClarifiedFunctionOutput(
+                    summary="ok",
+                    confidence=1.0,
+                    renamings={},
+                    cleaned_c="int helper(void) { return 0; }",
+                ),
+                raw_text=json.dumps(
+                    {
+                        "summary": "ok",
+                        "confidence": 1.0,
+                        "renamings": {},
+                        "cleaned_c": "int helper(void) { return 0; }",
+                    }
+                ),
+                json_valid=True,
+            )
+
+    with caplog.at_level(logging.INFO):
+        records = cli_module._run_checkpoint_baseline_system(
+            samples,  # type: ignore[arg-type]
+            system="base_qwen",
+            predictor=DummyPredictor(),
+            max_new_tokens=128,
+            temperature=0.0,
+            logger=logging.getLogger("base-qwen-test"),
+            max_workers=1,
+        )
+
+    assert len(records) == 3
+    progress_messages = [
+        record.message
+        for record in caplog.records
+        if "baseline progress system=base_qwen" in record.message
+    ]
+    assert len(progress_messages) == 3
+    assert "completed=1/3 sample_id=sample-1 json_valid=True" in progress_messages[0]
+    assert "completed=2/3 sample_id=sample-2 json_valid=True" in progress_messages[1]
+    assert "completed=3/3 sample_id=sample-3 json_valid=True" in progress_messages[2]
+
+
+def test_resolve_openrouter_model_id_prefers_explicit_override() -> None:
+    assert (
+        cli_module._resolve_openrouter_model_id(
+            base_model_id="Qwen/Qwen3.5-2B",
+            base_model_openrouter_id="openrouter/qwen",
+        )
+        == "openrouter/qwen"
+    )
+    assert (
+        cli_module._resolve_openrouter_model_id(
+            base_model_id="Qwen/Qwen3.5-2B",
+            base_model_openrouter_id=None,
+        )
+        == "Qwen/Qwen3.5-2B"
+    )
+    assert (
+        cli_module._resolve_openrouter_model_id(
+            base_model_id=None,
+            base_model_openrouter_id=None,
+        )
+        is None
+    )

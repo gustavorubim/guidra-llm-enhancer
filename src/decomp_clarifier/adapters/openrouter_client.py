@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 from copy import deepcopy
 from typing import Any
 
@@ -11,6 +12,26 @@ from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 
 class OpenRouterError(RuntimeError):
     """Raised when the OpenRouter request fails or returns an invalid payload."""
+
+
+def _build_httpx_client(
+    *,
+    api_key: str | None,
+    base_url: str,
+    transport: httpx.BaseTransport | None = None,
+) -> httpx.Client:
+    kwargs = {
+        "base_url": base_url,
+        "headers": {"Authorization": f"Bearer {api_key}"} if api_key else {},
+        "timeout": 60.0,
+        "transport": transport,
+    }
+    try:
+        return httpx.Client(**kwargs)
+    except FileNotFoundError:
+        # Some shells export SSL_CERT_FILE / SSL_CERT_DIR paths that no longer exist.
+        # Retry with an explicit default context so httpx does not resolve TLS paths from env.
+        return httpx.Client(**kwargs, verify=ssl.create_default_context())
 
 
 class OpenRouterClient:
@@ -24,10 +45,9 @@ class OpenRouterClient:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.cache = cache
-        self._client = httpx.Client(
+        self._client = _build_httpx_client(
+            api_key=api_key,
             base_url=self.base_url,
-            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
-            timeout=60.0,
             transport=transport,
         )
 

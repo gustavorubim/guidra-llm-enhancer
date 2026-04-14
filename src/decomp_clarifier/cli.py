@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,7 @@ from decomp_clarifier.adapters.filesystem_cache import FilesystemCache
 from decomp_clarifier.adapters.ghidra_headless import GhidraHeadlessAdapter
 from decomp_clarifier.adapters.openrouter_client import OpenRouterClient
 from decomp_clarifier.baselines import naming_only, raw_ghidra
+from decomp_clarifier.baselines.openrouter_structured import OpenRouterStructuredBaselinePredictor
 from decomp_clarifier.baselines.simple_llm_cleanup import PromptOnlyCleanupBaseline
 from decomp_clarifier.compilation.build_runner import BuildRunner
 from decomp_clarifier.dataset.builders import build_function_dataset
@@ -133,6 +134,18 @@ def _progress_interval(sample_count: int) -> int:
     return max(1, sample_count // 10)
 
 
+def _log_every_completion(*, system: str, max_workers: int) -> bool:
+    return system == "base_qwen" and max_workers == 1
+
+
+def _resolve_openrouter_model_id(
+    *, base_model_id: str | None, base_model_openrouter_id: str | None
+) -> str | None:
+    if base_model_openrouter_id is not None:
+        return base_model_openrouter_id
+    return base_model_id
+
+
 def _run_output_baseline_system(
     samples: list[FunctionDatasetSample],
     *,
@@ -143,6 +156,7 @@ def _run_output_baseline_system(
 ) -> list[PredictionRecord]:
     sample_count = len(samples)
     interval = _progress_interval(sample_count)
+    log_each_completion = _log_every_completion(system=system, max_workers=max_workers)
     started_at = time.perf_counter()
     if logger is not None:
         logger.info(
@@ -161,11 +175,15 @@ def _run_output_baseline_system(
             for index, record in enumerate(executor.map(predict_one, samples), start=1):
                 records.append(record)
                 if logger is not None and (
-                    index == 1 or index == sample_count or index % interval == 0
+                    log_each_completion
+                    or index == 1
+                    or index == sample_count
+                    or index % interval == 0
                 ):
                     elapsed = max(time.perf_counter() - started_at, 1e-9)
                     logger.info(
-                        "baseline progress system=%s completed=%s/%s sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
+                        "baseline progress system=%s completed=%s/%s "
+                        "sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
                         system,
                         index,
                         sample_count,
@@ -176,10 +194,16 @@ def _run_output_baseline_system(
     else:
         for index, sample in enumerate(samples, start=1):
             records.append(predict_one(sample))
-            if logger is not None and (index == 1 or index == sample_count or index % interval == 0):
+            if logger is not None and (
+                log_each_completion
+                or index == 1
+                or index == sample_count
+                or index % interval == 0
+            ):
                 elapsed = max(time.perf_counter() - started_at, 1e-9)
                 logger.info(
-                    "baseline progress system=%s completed=%s/%s sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
+                    "baseline progress system=%s completed=%s/%s "
+                    "sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
                     system,
                     index,
                     sample_count,
@@ -211,6 +235,7 @@ def _run_checkpoint_baseline_system(
 ) -> list[PredictionRecord]:
     sample_count = len(samples)
     interval = _progress_interval(sample_count)
+    log_each_completion = _log_every_completion(system=system, max_workers=max_workers)
     started_at = time.perf_counter()
     if logger is not None:
         logger.info(
@@ -234,31 +259,42 @@ def _run_checkpoint_baseline_system(
             for index, record in enumerate(executor.map(predict_one, samples), start=1):
                 records.append(record)
                 if logger is not None and (
-                    index == 1 or index == sample_count or index % interval == 0
+                    log_each_completion
+                    or index == 1
+                    or index == sample_count
+                    or index % interval == 0
                 ):
                     elapsed = max(time.perf_counter() - started_at, 1e-9)
                     logger.info(
-                        "baseline progress system=%s completed=%s/%s sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
+                        "baseline progress system=%s completed=%s/%s "
+                        "sample_id=%s json_valid=%s elapsed=%.1fs rate=%.2f samples/s",
                         system,
                         index,
                         sample_count,
                         samples[index - 1].sample_id,
+                        record.json_valid,
                         elapsed,
                         index / elapsed,
                     )
     else:
         for index, sample in enumerate(samples, start=1):
-            records.append(
-                predict_one(sample)
-            )
-            if logger is not None and (index == 1 or index == sample_count or index % interval == 0):
+            record = predict_one(sample)
+            records.append(record)
+            if logger is not None and (
+                log_each_completion
+                or index == 1
+                or index == sample_count
+                or index % interval == 0
+            ):
                 elapsed = max(time.perf_counter() - started_at, 1e-9)
                 logger.info(
-                    "baseline progress system=%s completed=%s/%s sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
+                    "baseline progress system=%s completed=%s/%s "
+                    "sample_id=%s json_valid=%s elapsed=%.1fs rate=%.2f samples/s",
                     system,
                     index,
                     sample_count,
                     sample.sample_id,
+                    record.json_valid,
                     elapsed,
                     index / elapsed,
                 )
@@ -285,6 +321,7 @@ def _ordered_baseline_predictions(
         "generation_model",
         "strong_model",
         "base_qwen",
+        "base_qwen_openrouter",
     ]
     sample_count = len(samples)
     for system, records in system_predictions.items():
@@ -638,7 +675,24 @@ def run_baselines(
     model_id: str = typer.Option("openai/gpt-4.1-mini"),
     generation_model_id: str = typer.Option("openai/gpt-5.4-mini"),
     strong_model_id: str = typer.Option("openai/gpt-5.4-xhigh"),
-    base_model_id: str | None = typer.Option(None),
+    base_model_id: str | None = typer.Option(
+        None,
+        help="OpenRouter model id for the remote base_qwen comparison baseline.",
+    ),
+    base_model_openrouter_id: str | None = typer.Option(
+        None,
+        help=(
+            "Explicit override for the OpenRouter base_qwen model id. "
+            "Defaults to --base-model-id."
+        ),
+    ),
+    base_model_local_id: str | None = typer.Option(
+        None,
+        help=(
+            "Optional local Windows CUDA model/checkpoint for the local base_qwen baseline. "
+            "If omitted, the local base_qwen run is skipped."
+        ),
+    ),
     sample_limit: int | None = typer.Option(None),
     remote_workers: int = typer.Option(2, min=1),
 ) -> None:
@@ -700,11 +754,12 @@ def run_baselines(
     )
     if api_key is None:
         logger.warning(
-            "OPENROUTER_API_KEY not set; skipping generation_model and strong_model baselines."
+            "OPENROUTER_API_KEY not set; skipping generation_model, strong_model, "
+            "and base_qwen_openrouter baselines."
         )
 
     base_qwen_predictor = None
-    if base_model_id:
+    if base_model_local_id:
         try:
             import unsloth  # noqa: F401  # type: ignore[import-not-found]
 
@@ -712,14 +767,33 @@ def run_baselines(
             from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
 
             base_config = load_training_config(root, "grpo_qwen35_2b_12gb")
-            base_config.model.base_model_id = base_model_id
+            base_config.model.base_model_id = base_model_local_id
             base_qwen_predictor = CheckpointPredictor(
-                base_model_id,
+                base_model_local_id,
                 base_config,
                 prompt_formatter=format_rl_prompt,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("skipping base_qwen baseline: %s", exc)
+
+    base_qwen_openrouter_predictor = None
+    remote_base_model_id = _resolve_openrouter_model_id(
+        base_model_id=base_model_id,
+        base_model_openrouter_id=base_model_openrouter_id,
+    )
+    if api_key is not None and remote_base_model_id is not None:
+        from decomp_clarifier.dataset.prompt_formatter import format_rl_prompt
+
+        base_qwen_openrouter_predictor = OpenRouterStructuredBaselinePredictor(
+            client=_make_openrouter_client(
+                api_key=api_key,
+                base_url=app_config.run.openrouter_base_url,
+                cache_root=cache_root,
+            ),
+            model=remote_base_model_id,
+            prompt_formatter=format_rl_prompt,
+            schema_version="base-qwen-openrouter-baseline",
+        )
 
     system_predictions: dict[str, list[PredictionRecord]] = {
         "raw_ghidra": _run_output_baseline_system(
@@ -799,6 +873,22 @@ def run_baselines(
                     "temperature": 0.0,
                     "logger": logger,
                     "max_workers": 1,
+                },
+            )
+        )
+    if base_qwen_openrouter_predictor is not None:
+        pending_jobs.append(
+            (
+                "base_qwen_openrouter",
+                _run_checkpoint_baseline_system,
+                {
+                    "samples": samples,
+                    "system": "base_qwen_openrouter",
+                    "predictor": base_qwen_openrouter_predictor,
+                    "max_new_tokens": 384,
+                    "temperature": 0.0,
+                    "logger": logger,
+                    "max_workers": remote_workers,
                 },
             )
         )

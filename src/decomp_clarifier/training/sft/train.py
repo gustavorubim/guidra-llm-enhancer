@@ -13,7 +13,10 @@ from decomp_clarifier.training.utils.telemetry import (
     create_training_telemetry_callback,
 )
 from decomp_clarifier.training.utils.version_lock import validate_version_lock
-from decomp_clarifier.training.windows_guard import ensure_windows_cuda
+from decomp_clarifier.training.windows_guard import (
+    ensure_windows_cuda,
+    prepare_model_runtime_environment,
+)
 
 
 def _dataset_size(dataset: object) -> int | None:
@@ -26,6 +29,7 @@ def _dataset_size(dataset: object) -> int | None:
 def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
     logger = logging.getLogger("decomp_clarifier")
     ensure_windows_cuda()
+    prepare_model_runtime_environment()
     versions = validate_version_lock()
     hardware = detect_hardware()
     telemetry = TrainingTelemetry("sft", output_dir)
