@@ -502,6 +502,8 @@ The CLI loads exactly one training profile file. The `windows_cuda_16gb.yaml` an
 
 ```powershell
 python -m decomp_clarifier.cli train-grpo
+python -m decomp_clarifier.cli eval-grpo-checkpoint --split val
+
 ```
 
 Or, if you made a custom profile:
