@@ -150,6 +150,37 @@ def _metric_candidates(
     return ordered + extras
 
 
+def _has_numeric_metric(rows: list[dict[str, Any]], metric: str) -> bool:
+    return any(_is_numeric(row.get(metric)) for row in rows)
+
+
+def _filter_rows_by_source(rows: list[dict[str, Any]], source: str) -> list[dict[str, Any]]:
+    return [row for row in rows if row.get("source") == source]
+
+
+def _select_grpo_reward_plot(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    candidates = (
+        ("reward_func", "reward_mean"),
+        ("trainer", "reward"),
+        ("trainer_state", "reward"),
+        ("trainer", "mean_reward"),
+        ("trainer_state", "mean_reward"),
+        ("trainer", "rewards/reward_func/mean"),
+        ("trainer_state", "rewards/reward_func/mean"),
+    )
+    for source, metric in candidates:
+        source_rows = _filter_rows_by_source(rows, source)
+        if source_rows and _has_numeric_metric(source_rows, metric):
+            return source_rows, [metric]
+
+    fallback_metrics = [
+        metric
+        for metric in ("reward_mean", "reward", "mean_reward", "rewards/reward_func/mean")
+        if _has_numeric_metric(rows, metric)
+    ]
+    return rows, fallback_metrics[:1]
+
+
 def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     unique_rows: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -277,20 +308,11 @@ class TrainingTelemetry:
                 )
             }
         else:
+            reward_rows, reward_metrics = _select_grpo_reward_plot(self.rows)
             plots = {
                 "reward": _plot_metrics(
-                    rows=self.rows,
-                    metric_keys=_metric_candidates(
-                        self.rows,
-                        preferred=[
-                            "reward_mean",
-                            "reward",
-                            "mean_reward",
-                            "reward_max",
-                            "reward_min",
-                        ],
-                        contains="reward",
-                    ),
+                    rows=reward_rows,
+                    metric_keys=reward_metrics,
                     output_path=self.plots_dir / "grpo_reward.png",
                     title="GRPO Reward Over Time",
                     ylabel="reward",

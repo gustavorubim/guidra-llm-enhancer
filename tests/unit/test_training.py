@@ -48,6 +48,7 @@ from decomp_clarifier.training.sft.data import (
 )
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.memory_profiles import select_memory_profile
+from decomp_clarifier.training.utils import telemetry as training_telemetry
 from decomp_clarifier.training.utils.trl_compat import (
     ensure_model_warnings_issued,
     normalize_optional_flag,
@@ -580,3 +581,105 @@ def test_run_training_wrappers_with_fake_modules(
     grpo_jsonl = (tmp_path / "grpo" / "logs" / "grpo_metrics.jsonl").read_text(encoding="utf-8")
     assert "loss" in sft_jsonl
     assert "reward_mean" in grpo_jsonl
+
+
+def test_grpo_reward_plot_prefers_reward_func_mean(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_plot_metrics(
+        *,
+        rows: list[dict[str, object]],
+        metric_keys: list[str],
+        output_path: Path,
+        title: str,
+        ylabel: str,
+    ) -> dict[str, object]:
+        captured["rows"] = rows
+        captured["metric_keys"] = metric_keys
+        captured["title"] = title
+        captured["ylabel"] = ylabel
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        return {
+            "path": str(output_path),
+            "metrics": metric_keys,
+            "rendered": bool(metric_keys),
+            "reason": None if metric_keys else "no matching metrics",
+        }
+
+    monkeypatch.setattr(training_telemetry, "_plot_metrics", fake_plot_metrics)
+    telemetry = training_telemetry.TrainingTelemetry("grpo", tmp_path)
+    telemetry.record_metrics(
+        {
+            "reward_count": 4,
+            "reward_max": 8.0,
+            "reward_mean": 3.5,
+            "reward_min": 1.0,
+            "reward_std": 2.0,
+        },
+        step=1,
+        source="reward_func",
+    )
+    telemetry.record_metrics(
+        {
+            "reward": 3.5,
+            "reward_std": 2.1,
+            "rewards/reward_func/mean": 3.5,
+        },
+        step=5,
+        source="trainer",
+    )
+
+    summary = telemetry.finalize()
+
+    assert summary["plots"]["reward"]["metrics"] == ["reward_mean"]
+    assert captured["metric_keys"] == ["reward_mean"]
+    assert all(row["source"] == "reward_func" for row in captured["rows"])
+
+
+def test_grpo_reward_plot_falls_back_to_trainer_reward(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_plot_metrics(
+        *,
+        rows: list[dict[str, object]],
+        metric_keys: list[str],
+        output_path: Path,
+        title: str,
+        ylabel: str,
+    ) -> dict[str, object]:
+        captured["rows"] = rows
+        captured["metric_keys"] = metric_keys
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"png")
+        return {
+            "path": str(output_path),
+            "metrics": metric_keys,
+            "rendered": bool(metric_keys),
+            "reason": None if metric_keys else "no matching metrics",
+        }
+
+    monkeypatch.setattr(training_telemetry, "_plot_metrics", fake_plot_metrics)
+    telemetry = training_telemetry.TrainingTelemetry("grpo", tmp_path)
+    telemetry.record_metrics(
+        {
+            "reward": 2.25,
+            "reward_std": 0.75,
+            "rewards/reward_func/mean": 2.25,
+        },
+        step=9,
+        source="trainer",
+    )
+    telemetry.record_metrics(
+        {
+            "loss": 0.1,
+        },
+        step=10,
+        source="train_result",
+    )
+
+    summary = telemetry.finalize()
+
+    assert summary["plots"]["reward"]["metrics"] == ["reward"]
+    assert captured["metric_keys"] == ["reward"]
+    assert all(row["source"] == "trainer" for row in captured["rows"])
