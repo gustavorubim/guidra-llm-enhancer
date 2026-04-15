@@ -16,8 +16,16 @@ from decomp_clarifier.schemas.dataset import (
 def _allowed_callees(sample: FunctionDatasetSample) -> list[str]:
     # Ghidra import/callee recovery is sparse on some samples. Fall back to calls
     # seen in the cleaned target so reward shaping does not punish target-valid calls.
+    # Include the source function name as well so recursive/self references are not
+    # misclassified as hallucinated calls by the GRPO reward stack.
     return list(
-        dict.fromkeys([*sample.callees, *extract_called_functions(sample.target_clean_code)])
+        dict.fromkeys(
+            [
+                *sample.callees,
+                *extract_called_functions(sample.target_clean_code),
+                sample.source_function_name,
+            ]
+        )
     )
 
 

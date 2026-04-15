@@ -113,6 +113,7 @@ def test_parse_exports_align_dataset_and_export_runner(
     assert rl_records[0].raw_code == sample_dataset_samples[0].ghidra_decompiled_code
     assert "#include <stdio.h>" in rl_records[0].compile_reference_source
     assert "strlen" in rl_records[0].allowed_callees
+    assert sample_dataset_samples[0].source_function_name in rl_records[0].allowed_callees
     assert "Assembly:" not in rl_records[0].prompt
     assert "Decompiler:" in rl_records[0].prompt
 

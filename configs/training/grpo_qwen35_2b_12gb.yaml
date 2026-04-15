@@ -9,7 +9,7 @@ training:
   batch_size: 1
   grad_accum_steps: 1
   epochs: 1
-  max_steps: 150
+  max_steps: 1000
   max_prompt_length: 896
   max_completion_length: 384
   generations_per_prompt: 4
@@ -21,7 +21,7 @@ training:
   lr_scheduler_type: cosine
   optim: adamw_8bit
   max_grad_norm: 0.1
-  save_steps: 150
+  save_steps: 300
   behavior_similarity_threshold: 0.35
   reward_weights:
     format: 1.0
