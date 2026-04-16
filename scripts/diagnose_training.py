@@ -39,7 +39,7 @@ def main() -> None:
     sys.path.insert(0, str(ROOT / "src"))
     from decomp_clarifier.settings import load_training_config
 
-    config = load_training_config(ROOT, "sft_qwen35_4b")
+    config = load_training_config(ROOT, "sft_qwen35_4b_12gb")
     print(f"Model:          {config.model.base_model_id}")
     print(f"max_seq_length: {config.training.max_seq_length}")
     print(f"lora_rank:      {config.training.lora_rank}")

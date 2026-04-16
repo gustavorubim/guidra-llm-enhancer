@@ -94,6 +94,60 @@ def test_build_target_comparison_systems_and_render_table() -> None:
     )
 
 
+def test_build_target_comparison_systems_supports_extra_manifests() -> None:
+    baseline_metrics = {
+        "raw_ghidra": {
+            "json_valid_rate": 1.0,
+            "readability_score": 0.53,
+            "naming_score": 0.0,
+            "compile_success_rate": 0.02,
+            "behavior_success_rate": 0.0,
+        }
+    }
+    sft_manifest = {
+        "stage": "sft",
+        "metrics": {"json_valid_rate": 0.9},
+        "baseline_metrics": baseline_metrics,
+    }
+    grpo_manifest = {
+        "stage": "grpo",
+        "metrics": {"json_valid_rate": 0.88},
+        "baseline_metrics": baseline_metrics,
+    }
+    extra_manifests = {
+        "sft_4b_1000": {
+            "stage": "sft",
+            "metrics": {"json_valid_rate": 0.95},
+            "baseline_metrics": baseline_metrics,
+        },
+        "grpo_4b_1000": {
+            "stage": "grpo",
+            "metrics": {"json_valid_rate": 0.93},
+            "baseline_metrics": baseline_metrics,
+        },
+    }
+
+    systems = build_target_comparison_systems(
+        sft_manifest,
+        grpo_manifest,
+        extra_manifests=extra_manifests,
+    )
+    columns = [*TARGET_COLUMNS, "sft_4b_1000", "grpo_4b_1000"]
+
+    assert list(systems) == columns
+    table = render_target_comparison_table(systems, columns=columns)
+
+    assert (
+        table.splitlines()[0]
+        == "| Metric | raw_ghidra | naming_only | base_qwen | base_qwen_openrouter | sft | grpo | "
+        "prompt_only_cleanup | generation_model | strong_model | sft_4b_1000 | grpo_4b_1000 |"
+    )
+    assert (
+        "| json_valid_rate | 1.000 | -- | -- | -- | 0.900 | 0.880 | -- | -- | -- | 0.950 | "
+        "0.930 |" in table
+    )
+
+
 def test_build_target_comparison_systems_rejects_conflicting_baselines() -> None:
     sft_manifest = {
         "metrics": {},

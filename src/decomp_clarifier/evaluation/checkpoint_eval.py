@@ -45,13 +45,51 @@ def _progress_interval(sample_count: int) -> int:
     return max(1, sample_count // 10)
 
 
-def find_latest_completed_checkpoint(paths: ProjectPaths, stage: str) -> Path:
+def _training_profile_for_manifest(manifest_path: Path) -> str | None:
+    resolved_path = manifest_path.parent.parent / "resolved_config.yaml"
+    if not resolved_path.exists():
+        return None
+    payload = yaml.safe_load(resolved_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        return None
+    raw_profile = payload.get("training_profile")
+    if isinstance(raw_profile, str) and raw_profile:
+        return raw_profile
+    return None
+
+
+def _resolved_config_path_for_checkpoint(checkpoint_dir: Path) -> Path:
+    if checkpoint_dir.name.startswith("checkpoint-"):
+        return checkpoint_dir.parent.parent / "resolved_config.yaml"
+    return checkpoint_dir.parent / "resolved_config.yaml"
+
+
+def find_latest_completed_checkpoint(
+    paths: ProjectPaths, stage: str, *, training_profile: str | None = None
+) -> Path:
     manifest_name = (
         "sft_training_manifest.json" if stage == "sft" else "grpo_training_manifest.json"
     )
     manifests = sorted(paths.runs_dir.glob(f"train-{stage}-*/model/{manifest_name}"))
     if not manifests:
         raise FileNotFoundError(f"No completed train-{stage} checkpoint manifest found.")
+    if training_profile is not None:
+        matching = [
+            manifest
+            for manifest in manifests
+            if _training_profile_for_manifest(manifest) == training_profile
+        ]
+        if matching:
+            return matching[-1].parent
+        unlabeled = [
+            manifest for manifest in manifests if _training_profile_for_manifest(manifest) is None
+        ]
+        if len(unlabeled) == 1:
+            return unlabeled[-1].parent
+        raise FileNotFoundError(
+            "No completed "
+            f"train-{stage} checkpoint manifest found for training_profile={training_profile!r}."
+        )
     return manifests[-1].parent
 
 
@@ -64,7 +102,7 @@ def normalize_checkpoint_dir(checkpoint_dir: Path) -> Path:
 def load_checkpoint_training_config(
     root: Path, checkpoint_dir: Path, training_profile: str
 ) -> TrainingConfig:
-    resolved_path = checkpoint_dir.parent / "resolved_config.yaml"
+    resolved_path = _resolved_config_path_for_checkpoint(checkpoint_dir)
     if resolved_path.exists():
         payload = yaml.safe_load(resolved_path.read_text(encoding="utf-8")) or {}
         training_payload = payload.get("training")

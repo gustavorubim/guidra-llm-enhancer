@@ -414,7 +414,11 @@ def _resolve_grpo_base_model(paths: ProjectPaths, training_config: TrainingConfi
         return training_config.model.base_model_id
     from decomp_clarifier.evaluation.checkpoint_eval import find_latest_completed_checkpoint
 
-    checkpoint_dir = find_latest_completed_checkpoint(paths, "sft")
+    checkpoint_dir = find_latest_completed_checkpoint(
+        paths,
+        "sft",
+        training_profile=training_config.model.source_training_profile,
+    )
     training_config.model.base_model_id = str(checkpoint_dir)
     return training_config.model.base_model_id
 
@@ -1008,6 +1012,7 @@ def train_sft(
         run_dir / "resolved_config.yaml",
         {
             "app": app_config.model_dump(mode="python"),
+            "training_profile": training_profile,
             "training": training_config.model_dump(mode="python"),
         },
     )
@@ -1039,6 +1044,7 @@ def train_grpo(
         run_dir / "resolved_config.yaml",
         {
             "app": app_config.model_dump(mode="python"),
+            "training_profile": training_profile,
             "training": training_config.model_dump(mode="python"),
         },
     )
@@ -1077,7 +1083,7 @@ def eval_sft_checkpoint(
     resolved_checkpoint = (
         paths.resolve(checkpoint_dir)
         if checkpoint_dir is not None
-        else find_latest_completed_checkpoint(paths, "sft")
+        else find_latest_completed_checkpoint(paths, "sft", training_profile=training_profile)
     )
     logger.info(
         "starting eval-sft-checkpoint run_id=%s checkpoint=%s split=%s",
@@ -1138,7 +1144,7 @@ def eval_grpo_checkpoint(
     resolved_checkpoint = (
         paths.resolve(checkpoint_dir)
         if checkpoint_dir is not None
-        else find_latest_completed_checkpoint(paths, "grpo")
+        else find_latest_completed_checkpoint(paths, "grpo", training_profile=training_profile)
     )
     logger.info(
         "starting eval-grpo-checkpoint run_id=%s checkpoint=%s split=%s",

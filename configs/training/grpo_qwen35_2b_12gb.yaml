@@ -1,5 +1,6 @@
 model:
   base_model_id:
+  source_training_profile: sft_qwen35_2b_12gb
   loader_variant: unsloth
 training:
   max_seq_length: 1536
@@ -9,10 +10,10 @@ training:
   batch_size: 1
   grad_accum_steps: 1
   epochs: 1
-  max_steps: 1000
+  max_steps: 300
   max_prompt_length: 896
   max_completion_length: 384
-  generations_per_prompt: 4
+  generations_per_prompt: 16
   learning_rate: 2.0e-6
   adam_beta1: 0.9
   adam_beta2: 0.99

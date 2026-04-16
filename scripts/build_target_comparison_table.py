@@ -28,6 +28,15 @@ def _resolve_output_path(paths: ProjectPaths, value: Path | None, default: Path)
     return resolved
 
 
+def _parse_extra_manifest(value: str) -> tuple[str, Path]:
+    label, separator, raw_path = value.partition("=")
+    if not separator or not label.strip() or not raw_path.strip():
+        raise argparse.ArgumentTypeError(
+            "Expected --extra-manifest in the form label=path/to/checkpoint_eval_manifest.json"
+        )
+    return label.strip(), Path(raw_path.strip())
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -55,6 +64,13 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="JSON output path. Defaults to artifacts/reports/target_comparison_table.json.",
     )
+    parser.add_argument(
+        "--extra-manifest",
+        action="append",
+        type=_parse_extra_manifest,
+        default=[],
+        help="Append an extra labeled checkpoint column as label=path/to/checkpoint_eval_manifest.json.",
+    )
     return parser.parse_args()
 
 
@@ -78,8 +94,23 @@ def main() -> None:
 
     sft_manifest = load_checkpoint_eval_manifest(sft_manifest_path, expected_stage="sft")
     grpo_manifest = load_checkpoint_eval_manifest(grpo_manifest_path, expected_stage="grpo")
-    systems = build_target_comparison_systems(sft_manifest, grpo_manifest)
-    table = render_target_comparison_table(systems)
+    extra_manifest_paths: dict[str, Path] = {}
+    extra_manifests = {}
+    for label, extra_path in args.extra_manifest:
+        if label in TARGET_COLUMNS:
+            raise ValueError(f"Extra manifest label {label!r} conflicts with a built-in column.")
+        if label in extra_manifest_paths:
+            raise ValueError(f"Duplicate extra manifest label: {label!r}")
+        resolved_extra_path = paths.resolve(extra_path)
+        extra_manifest_paths[label] = resolved_extra_path
+        extra_manifests[label] = load_checkpoint_eval_manifest(resolved_extra_path)
+    columns = [*TARGET_COLUMNS, *extra_manifest_paths]
+    systems = build_target_comparison_systems(
+        sft_manifest,
+        grpo_manifest,
+        extra_manifests=extra_manifests,
+    )
+    table = render_target_comparison_table(systems, columns=columns)
 
     markdown_path = _resolve_output_path(
         paths,
@@ -97,8 +128,11 @@ def main() -> None:
         "sources": {
             "sft_manifest": str(sft_manifest_path),
             "grpo_manifest": str(grpo_manifest_path),
+            "extra_manifests": {
+                label: str(path) for label, path in extra_manifest_paths.items()
+            },
         },
-        "columns": TARGET_COLUMNS,
+        "columns": columns,
         "metrics": TARGET_METRICS,
         "systems": systems,
         "table_markdown": table,

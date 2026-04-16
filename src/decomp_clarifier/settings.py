@@ -108,6 +108,7 @@ class DatasetConfig(BaseModel):
 
 class TrainingModelConfig(BaseModel):
     base_model_id: str | None = None
+    source_training_profile: str | None = None
     loader_variant: str | None = None
 
 
