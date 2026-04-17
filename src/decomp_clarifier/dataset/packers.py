@@ -62,6 +62,7 @@ def pack_rl_records(samples: list[FunctionDatasetSample]) -> list[PackedRLRecord
             target_renamings=json.dumps(sample.rename_map_target, sort_keys=True),
             allowed_imports=json.dumps(sample.imports),
             allowed_callees=json.dumps(_allowed_callees(sample)),
+            tests_ref=sample.tests_ref,
         )
         for sample in samples
     ]

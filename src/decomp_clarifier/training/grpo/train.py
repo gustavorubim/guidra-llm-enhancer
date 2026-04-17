@@ -4,12 +4,16 @@ import json
 import logging
 from pathlib import Path
 
-from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
+from decomp_clarifier.evaluation.behavior_eval import (
+    behavior_similarity,
+    evaluate_execution_behavior,
+    is_behavior_improvement,
+)
 from decomp_clarifier.evaluation.compile_eval import compile_candidate
-from decomp_clarifier.inference.formatter import normalize_output_with_status
+from decomp_clarifier.inference.formatter import normalize_output_with_schema_status
 from decomp_clarifier.settings import TrainingConfig
 from decomp_clarifier.training.grpo.data import prompt_from_record, reward_fields_from_record
-from decomp_clarifier.training.grpo.rewards import reward_breakdown
+from decomp_clarifier.training.grpo.rewards import empty_reward_breakdown, reward_breakdown
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.telemetry import (
     TrainingTelemetry,
@@ -26,7 +30,9 @@ from decomp_clarifier.training.windows_guard import (
     prepare_model_runtime_environment,
 )
 
-_BEHAVIOR_THRESHOLD = 0.35
+_BEHAVIOR_SIMILARITY_THRESHOLD = 0.35
+_EXECUTION_PASS_RATE_THRESHOLD = 1.0
+_MIN_COMPLETION_RATIO = 0.3
 
 
 def _dataset_size(dataset: object) -> int | None:
@@ -44,6 +50,7 @@ def _mean(values: list[float]) -> float:
 
 def compute_completion_reward(
     completion: str,
+    task_type: str,
     source_function_name: str,
     raw_code: str,
     compile_reference_source: str,
@@ -51,11 +58,15 @@ def compute_completion_reward(
     target_renamings_json: str,
     allowed_imports_json: str,
     allowed_callees_json: str,
+    tests_ref: str,
     weights: dict[str, float],
-    behavior_threshold: float = _BEHAVIOR_THRESHOLD,
+    behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
+    execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
+    min_completion_ratio: float = _MIN_COMPLETION_RATIO,
 ) -> float:
     return compute_completion_reward_details(
         completion=completion,
+        task_type=task_type,
         source_function_name=source_function_name,
         raw_code=raw_code,
         compile_reference_source=compile_reference_source,
@@ -63,13 +74,17 @@ def compute_completion_reward(
         target_renamings_json=target_renamings_json,
         allowed_imports_json=allowed_imports_json,
         allowed_callees_json=allowed_callees_json,
+        tests_ref=tests_ref,
         weights=weights,
         behavior_threshold=behavior_threshold,
+        execution_pass_rate_threshold=execution_pass_rate_threshold,
+        min_completion_ratio=min_completion_ratio,
     )["total"]
 
 
 def compute_completion_reward_details(
     completion: str,
+    task_type: str,
     source_function_name: str,
     raw_code: str,
     compile_reference_source: str,
@@ -77,44 +92,49 @@ def compute_completion_reward_details(
     target_renamings_json: str,
     allowed_imports_json: str,
     allowed_callees_json: str,
+    tests_ref: str,
     weights: dict[str, float],
-    behavior_threshold: float = _BEHAVIOR_THRESHOLD,
+    behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
+    execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
+    min_completion_ratio: float = _MIN_COMPLETION_RATIO,
 ) -> dict[str, float]:
     try:
-        output, json_valid = normalize_output_with_status(completion)
+        output, schema_status = normalize_output_with_schema_status(completion)
+        json_valid = schema_status != "invalid"
         if not json_valid:
-            return {
-                "json_valid": 0.0,
-                "format": 0.0,
-                "cleanup": 0.0,
-                "naming": 0.0,
-                "compile": 0.0,
-                "behavior": 0.0,
-                "readability": 0.0,
-                "signature": 0.0,
-                "hallucination_penalty": 0.0,
-                "decompiler_type_penalty": 0.0,
-                "gate_factor": 0.0,
-                "total": 0.0,
-            }
+            return empty_reward_breakdown()
         renamings: dict[str, str] = json.loads(target_renamings_json)
         imports: list[str] = json.loads(allowed_imports_json)
         callees: list[str] = json.loads(allowed_callees_json)
-        compile_success = compile_candidate(
+        behavior_from_execution = False
+        execution_result = evaluate_execution_behavior(
             output.cleaned_c,
-            compile_reference_source or target_clean_code,
-            function_name=source_function_name or None,
+            source_function_name=source_function_name,
+            tests_ref=tests_ref,
         )
-        behavior_score = behavior_similarity(output.cleaned_c, target_clean_code)
-        behavior_improvement = is_behavior_improvement(
-            output.cleaned_c,
-            raw_code,
-            target_clean_code,
-        )
-        behavior_success = behavior_score >= behavior_threshold and behavior_improvement
+        if execution_result is not None:
+            behavior_from_execution = True
+            compile_success = execution_result.compile_success
+            behavior_score = execution_result.pass_rate
+            behavior_improvement = True
+            behavior_success = behavior_score >= execution_pass_rate_threshold
+        else:
+            compile_success = compile_candidate(
+                output.cleaned_c,
+                compile_reference_source or target_clean_code,
+                function_name=source_function_name or None,
+            )
+            behavior_score = behavior_similarity(output.cleaned_c, target_clean_code)
+            behavior_improvement = is_behavior_improvement(
+                output.cleaned_c,
+                raw_code,
+                target_clean_code,
+            )
+            behavior_success = behavior_score >= behavior_threshold and behavior_improvement
         return reward_breakdown(
             output=output,
             json_valid=json_valid,
+            exact_json=schema_status == "strict",
             raw_code=raw_code,
             target_clean_code=target_clean_code,
             source_function_name=source_function_name,
@@ -123,25 +143,15 @@ def compute_completion_reward_details(
             behavior_success=behavior_success,
             behavior_score=behavior_score,
             behavior_improvement=behavior_improvement,
+            behavior_from_execution=behavior_from_execution,
             allowed_imports=imports,
             allowed_callees=callees,
             weights=weights,
+            task_type=task_type,
+            min_completion_ratio=min_completion_ratio,
         )
     except Exception:  # noqa: BLE001
-        return {
-            "json_valid": 0.0,
-            "format": 0.0,
-            "cleanup": 0.0,
-            "naming": 0.0,
-            "compile": 0.0,
-            "behavior": 0.0,
-            "readability": 0.0,
-            "signature": 0.0,
-            "hallucination_penalty": 0.0,
-            "decompiler_type_penalty": 0.0,
-            "gate_factor": 0.0,
-            "total": 0.0,
-        }
+        return empty_reward_breakdown()
 
 
 def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
@@ -183,7 +193,17 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     behavior_threshold = (
         config.training.behavior_similarity_threshold
         if config.training.behavior_similarity_threshold is not None
-        else _BEHAVIOR_THRESHOLD
+        else _BEHAVIOR_SIMILARITY_THRESHOLD
+    )
+    execution_pass_rate_threshold = (
+        config.training.execution_pass_rate_threshold
+        if config.training.execution_pass_rate_threshold is not None
+        else _EXECUTION_PASS_RATE_THRESHOLD
+    )
+    min_completion_ratio = (
+        config.training.min_completion_ratio
+        if config.training.min_completion_ratio is not None
+        else _MIN_COMPLETION_RATIO
     )
     batch_size = config.training.batch_size or config.hardware.batch_size or 1
     grad_accum_steps = config.training.grad_accum_steps or 1
@@ -214,16 +234,19 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         completions: list[str],
         source_function_name: list[str] | None = None,
         *,
+        task_type: list[str] | None = None,
         raw_code: list[str] | None = None,
         compile_reference_source: list[str] | None = None,
         target_clean_code: list[str] | None = None,
         target_renamings: list[str] | None = None,
         allowed_imports: list[str] | None = None,
         allowed_callees: list[str] | None = None,
+        tests_ref: list[str] | None = None,
         **_: object,
     ) -> list[float]:
         nonlocal reward_step
         n = len(completions)
+        task_types = task_type or ["full_clarify"] * n
         function_names = source_function_name or [""] * n
         raw_codes = raw_code or [""] * n
         compile_sources = compile_reference_source or [""] * n
@@ -231,9 +254,11 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         renaming_maps = target_renamings or ["{}"] * n
         import_lists = allowed_imports or ["[]"] * n
         callee_lists = allowed_callees or ["[]"] * n
+        test_refs = tests_ref or [""] * n
         details = [
             compute_completion_reward_details(
                 completion=completion,
+                task_type=task_types[index % len(task_types)],
                 source_function_name=function_names[index % len(function_names)],
                 raw_code=raw_codes[index % len(raw_codes)],
                 compile_reference_source=compile_sources[index % len(compile_sources)],
@@ -241,8 +266,11 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 target_renamings_json=renaming_maps[index % len(renaming_maps)],
                 allowed_imports_json=import_lists[index % len(import_lists)],
                 allowed_callees_json=callee_lists[index % len(callee_lists)],
+                tests_ref=test_refs[index % len(test_refs)],
                 weights=weights,
                 behavior_threshold=behavior_threshold,
+                execution_pass_rate_threshold=execution_pass_rate_threshold,
+                min_completion_ratio=min_completion_ratio,
             )
             for index, completion in enumerate(completions)
         ]

@@ -19,6 +19,7 @@ def prompt_from_record(record: dict[str, Any]) -> str:
 
 def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
+        "task_type": record.get("task_type", "full_clarify"),
         "source_function_name": record.get("source_function_name", ""),
         "raw_code": record.get("raw_code", ""),
         "compile_reference_source": record.get(
@@ -28,4 +29,5 @@ def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "target_renamings": record.get("target_renamings", "{}"),
         "allowed_imports": record.get("allowed_imports", "[]"),
         "allowed_callees": record.get("allowed_callees", "[]"),
+        "tests_ref": record.get("tests_ref") or "",
     }

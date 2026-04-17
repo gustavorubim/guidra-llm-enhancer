@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
+from decomp_clarifier.evaluation.behavior_eval import (
+    behavior_similarity,
+    evaluate_execution_behavior,
+    is_behavior_improvement,
+)
 from decomp_clarifier.evaluation.compile_eval import compile_candidate
 from decomp_clarifier.evaluation.metrics import field_complete, placeholder_ratio
 from decomp_clarifier.evaluation.naming_eval import normalized_name_similarity
@@ -28,17 +32,26 @@ def verify_output(
     *,
     json_valid: bool = True,
 ) -> VerificationResult:
-    compile_success = compile_candidate(
+    execution_result = evaluate_execution_behavior(
         output.cleaned_c,
-        sample.compile_reference_source or sample.source_code,
-        function_name=sample.source_function_name,
+        source_function_name=sample.source_function_name,
+        tests_ref=sample.tests_ref or "",
     )
-    behavior_score = behavior_similarity(output.cleaned_c, sample.target_clean_code)
-    behavior_success = behavior_score >= 0.35 and is_behavior_improvement(
-        output.cleaned_c,
-        sample.ghidra_decompiled_code,
-        sample.target_clean_code,
-    )
+    if execution_result is not None:
+        compile_success = execution_result.compile_success
+        behavior_success = execution_result.pass_rate >= 1.0
+    else:
+        compile_success = compile_candidate(
+            output.cleaned_c,
+            sample.compile_reference_source or sample.source_code,
+            function_name=sample.source_function_name,
+        )
+        behavior_score = behavior_similarity(output.cleaned_c, sample.target_clean_code)
+        behavior_success = behavior_score >= 0.35 and is_behavior_improvement(
+            output.cleaned_c,
+            sample.ghidra_decompiled_code,
+            sample.target_clean_code,
+        )
     return VerificationResult(
         json_valid=json_valid,
         field_complete=field_complete(output) if json_valid else False,

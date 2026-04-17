@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
+
+SchemaStatus = Literal["invalid", "extractable", "strict"]
 
 
 def extract_json_object(text: str) -> str | None:
@@ -45,15 +48,22 @@ def _fallback_output(text: str) -> ClarifiedFunctionOutput:
     )
 
 
-def normalize_output_with_status(text: str) -> tuple[ClarifiedFunctionOutput, bool]:
+def normalize_output_with_schema_status(text: str) -> tuple[ClarifiedFunctionOutput, SchemaStatus]:
     json_fragment = extract_json_object(text)
     if json_fragment is None:
-        return _fallback_output(text), False
+        return _fallback_output(text), "invalid"
     try:
         output = ClarifiedFunctionOutput.model_validate(json.loads(json_fragment))
-        return output, text.strip() == json_fragment.strip()
+        if text.strip() == json_fragment.strip():
+            return output, "strict"
+        return output, "extractable"
     except Exception:  # noqa: BLE001 - tolerate malformed generations during inference
-        return _fallback_output(text), False
+        return _fallback_output(text), "invalid"
+
+
+def normalize_output_with_status(text: str) -> tuple[ClarifiedFunctionOutput, bool]:
+    output, schema_status = normalize_output_with_schema_status(text)
+    return output, schema_status == "strict"
 
 
 def normalize_output(text: str) -> ClarifiedFunctionOutput:

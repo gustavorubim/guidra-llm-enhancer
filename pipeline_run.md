@@ -583,7 +583,7 @@ Success criteria:
 Important note:
 
 - `rl_records.jsonl` now uses a compact GRPO-specific prompt rather than the full SFT prompt. This keeps most rollout prompts under the `896` token cap in the 12 GB profile.
-- The default GRPO reward stack now includes signature fidelity and a decompiler-type penalty, and it down-weights positive reward when compile or behavior checks fail.
+- The default GRPO reward stack now prefers execution-backed behavior checks when `tests_ref` resolves to a generated project manifest, falls back to the similarity proxy otherwise, and only unlocks cleanup or readability bonuses after compile and behavior pass.
 
 ### 9.5 Evaluate The GRPO Checkpoint
 

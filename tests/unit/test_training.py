@@ -19,7 +19,7 @@ with suppress(ImportError):
     import torch as _torch_preload  # noqa: F401
 
 from decomp_clarifier.adapters.compiler_clang import resolve_clang_executable
-from decomp_clarifier.evaluation.behavior_eval import behavior_similarity
+from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, evaluate_execution_behavior
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 from decomp_clarifier.training.grpo.data import (
     load_rl_records,
@@ -139,6 +139,7 @@ def test_training_utilities_and_rewards(
         cleaned_c=sample.target_clean_code,
     )
     assert format_reward(output) == 1.0
+    assert format_reward(output, exact_json=False) == 0.5
     assert cleanup_reward(output, sample.ghidra_decompiled_code) >= 0.0
     assert naming_reward(output, sample.rename_map_target) == 1.0
     assert compile_reward(True) == 1.0
@@ -209,13 +210,16 @@ def test_training_utilities_and_rewards(
     rl_records = load_rl_records(rl_path)
     assert prompt_from_record(rl_records[0]) == "prompt text"
     empty_fields = reward_fields_from_record({})
+    assert empty_fields["task_type"] == "full_clarify"
     assert empty_fields["raw_code"] == ""
     assert empty_fields["compile_reference_source"] == ""
     assert empty_fields["target_renamings"] == "{}"
+    assert empty_fields["tests_ref"] == ""
 
     populated_fields = reward_fields_from_record(
         {
             "prompt": "p",
+            "task_type": "rename",
             "source_function_name": "helper",
             "raw_code": "raw",
             "compile_reference_source": "#include <stdio.h>\nint helper(void) { return 0; }\n",
@@ -223,10 +227,13 @@ def test_training_utilities_and_rewards(
             "target_renamings": '{"local_10":"result"}',
             "allowed_imports": '["printf"]',
             "allowed_callees": '["printf"]',
+            "tests_ref": "sample_project/project_manifest.json",
         }
     )
+    assert populated_fields["task_type"] == "rename"
     assert populated_fields["source_function_name"] == "helper"
     assert populated_fields["compile_reference_source"].startswith("#include <stdio.h>")
+    assert populated_fields["tests_ref"] == "sample_project/project_manifest.json"
 
     assert behavior_similarity("int helper(void) { return 0; }", "") == 0.0
 
@@ -263,6 +270,7 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
             '{"summary":"ok","confidence":1.0,"renamings":{},'
             '"cleaned_c":"int helper(void){ printf(\\"hi\\\\n\\"); return 0; }"}'
         ),
+        task_type="full_clarify",
         source_function_name="helper",
         raw_code='int helper(void){ undefined8 local_10; printf("hi\\n"); return 0; }',
         compile_reference_source='#include <stdio.h>\nint helper(void) { return 0; }\n',
@@ -270,6 +278,7 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
         target_renamings_json="{}",
         allowed_imports_json='["printf"]',
         allowed_callees_json='["printf"]',
+        tests_ref="",
         weights={
             "format": 0.0,
             "cleanup": 0.0,
@@ -281,7 +290,7 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
         },
     )
     expected_compile_only = (
-        safety_gate_factor(compile_success=True, behavior_success=False)
+        1.0
         if resolve_clang_executable("clang") is not None
         else 0.0
     )
@@ -316,7 +325,7 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
             "decompiler_type_penalty": 0.0,
         },
     )
-    assert continuous_behavior_reward == pytest.approx(0.15)
+    assert continuous_behavior_reward == pytest.approx(0.25)
     regressive_behavior_reward = weighted_reward(
         output=ClarifiedFunctionOutput(
             summary="ok",
@@ -348,12 +357,44 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
         },
     )
     assert regressive_behavior_reward == 0.0
+    compile_failure_capped_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={"local_10": "result"},
+            cleaned_c="int helper(void) { return 0; }",
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ undefined8 local_10; return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={"local_10": "result"},
+        compile_success=False,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 1.0,
+            "naming": 1.0,
+            "compile": 3.0,
+            "behavior": 3.0,
+            "readability": 1.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+        },
+    )
+    assert compile_failure_capped_reward <= 0.0
 
     assert compute_completion_reward(
         completion=(
             '{"summary":"x","confidence":0.5,"renamings":{},'
             '"cleaned_c":"int f(void){return 0;}"}'
         ),
+        task_type="full_clarify",
         source_function_name="f",
         raw_code="",
         compile_reference_source="",
@@ -361,6 +402,7 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
         target_renamings_json="not valid json",
         allowed_imports_json="[]",
         allowed_callees_json="[]",
+        tests_ref="",
         weights={},
     ) == 0.0
 
@@ -375,6 +417,45 @@ def test_prepare_model_runtime_environment_sanitizes_invalid_cert_paths(
     assert isinstance(root.warnings_issued, dict)
     assert isinstance(middle.warnings_issued, dict)
     assert isinstance(leaf.warnings_issued, dict)
+
+
+def test_execution_behavior_uses_project_tests(
+    tmp_path: Path,
+    sample_project,
+) -> None:
+    if resolve_clang_executable("clang") is None:
+        pytest.skip("clang is required for execution-backed behavior checks")
+
+    project_root = tmp_path / sample_project.project_id
+    project_root.mkdir(parents=True, exist_ok=True)
+    manifest_path = project_root / "project_manifest.json"
+    manifest_path.write_text(sample_project.model_dump_json(indent=2), encoding="utf-8")
+
+    correct_candidate = """static int count_letters(const char *text) {
+    int total = 0;
+    while (*text != '\\0') {
+        total += 1;
+        text += 1;
+    }
+    return total;
+}"""
+    correct_result = evaluate_execution_behavior(
+        correct_candidate,
+        source_function_name="count_letters",
+        tests_ref=str(manifest_path),
+    )
+    assert correct_result is not None
+    assert correct_result.compile_success is True
+    assert correct_result.pass_rate == pytest.approx(1.0)
+
+    broken_result = evaluate_execution_behavior(
+        "static int count_letters(const char *text) { return 0; }",
+        source_function_name="count_letters",
+        tests_ref=str(manifest_path),
+    )
+    assert broken_result is not None
+    assert broken_result.compile_success is True
+    assert broken_result.pass_rate == pytest.approx(0.0)
 
 
 def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:

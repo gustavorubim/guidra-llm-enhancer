@@ -47,6 +47,7 @@ class PackedRLRecord(BaseModel):
     target_renamings: str
     allowed_imports: str
     allowed_callees: str
+    tests_ref: str | None = None
 
 
 class DatasetManifest(BaseModel):

@@ -114,6 +114,7 @@ def test_parse_exports_align_dataset_and_export_runner(
     assert "#include <stdio.h>" in rl_records[0].compile_reference_source
     assert "strlen" in rl_records[0].allowed_callees
     assert sample_dataset_samples[0].source_function_name in rl_records[0].allowed_callees
+    assert rl_records[0].tests_ref == sample_dataset_samples[0].tests_ref
     assert "Assembly:" not in rl_records[0].prompt
     assert "Decompiler:" in rl_records[0].prompt
 

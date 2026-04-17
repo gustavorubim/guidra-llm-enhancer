@@ -24,13 +24,15 @@ training:
   max_grad_norm: 0.1
   save_steps: 100
   behavior_similarity_threshold: 0.35
+  execution_pass_rate_threshold: 1.0
+  min_completion_ratio: 0.3
   reward_weights:
-    format: 1.0
+    format: 0.5
     cleanup: 1.5
-    naming: 1.5
+    naming: 1.0
     compile: 3.0
-    behavior: 2.0
-    readability: 1.0
-    signature: 1.0
-    hallucination_penalty: 2.0
-    decompiler_type_penalty: 1.0
+    behavior: 3.0
+    readability: 0.75
+    signature: 1.25
+    hallucination_penalty: 1.5
+    decompiler_type_penalty: 1.5

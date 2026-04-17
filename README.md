@@ -107,11 +107,11 @@ Current reward components:
 
 | Component | Range | What it rewards | Current implementation |
 |---|---|---|---|
-| `format` | `0` or `1` | Non-empty structured output | Requires both `summary` and `cleaned_c` to be non-empty |
+| `format` | `0.0`, `0.5`, or `1.0` | Structured JSON output | Gives full credit to strict JSON and partial credit when valid JSON is extractable from wrapper text |
 | `cleanup` | `0.0` to `1.0` | Removal of Ghidra placeholder names | Compares placeholder count before vs after for tokens like `param_*`, `local_*`, `iVar*`, `uVar*` |
 | `naming` | `0.0` to `1.0` | Better identifier recovery | Uses normalized similarity against the synthetic target rename map |
 | `compile` | `0` or `1` | Syntactic validity | Runs `clang -fsyntax-only` on the candidate with includes copied from the reference source |
-| `behavior` | `0` or `1` | Semantic plausibility | Uses a token-overlap proxy and currently passes at `>= 0.35` similarity |
+| `behavior` | `0.0` to `1.0` | Semantic plausibility | Uses project test pass rate when `tests_ref` resolves to a generated project manifest, and otherwise falls back to the older token-overlap proxy |
 | `readability` | `0.0` to `1.0` | Easier-to-read code | Rewards readability improvement over raw decompiler text, penalizing long lines, placeholders, and `goto` usage |
 | `signature` | `0.0` to `1.0` | Preserves the original function shape | Rewards matching function name, arity, return type, and exact normalized signature |
 | `hallucination_penalty` | `0.0+` penalty | Fewer invented calls | Penalizes calls not present in the binary-grounded imports/callees context |
@@ -121,19 +121,21 @@ Default GRPO weights from `configs/training/grpo_qwen35_2b.yaml`:
 
 | Weight key | Default |
 |---|---|
-| `format` | `1.0` |
+| `format` | `0.5` |
 | `cleanup` | `1.5` |
-| `naming` | `1.5` |
+| `naming` | `1.0` |
 | `compile` | `3.0` |
-| `behavior` | `2.0` |
-| `readability` | `1.0` |
-| `signature` | `1.0` |
-| `hallucination_penalty` | `2.0` |
-| `decompiler_type_penalty` | `1.0` |
+| `behavior` | `3.0` |
+| `readability` | `0.75` |
+| `signature` | `1.25` |
+| `hallucination_penalty` | `1.5` |
+| `decompiler_type_penalty` | `1.5` |
 
 Important status note:
 
-- The current `compile` and `behavior` checks are conservative proxies, not full recompilation and differential execution against the original binary yet.
+- GRPO now prefers project-level compile-and-test execution when the packed RL record carries a resolvable `tests_ref`; otherwise it falls back to the older similarity proxy.
+- Cleanup, naming, and readability bonuses are now staged behind compile and behavior success rather than being multiplied into all outputs.
+- The reward stack also includes a completion-length floor so short stub outputs do not collect positive reward from schema or signature terms alone.
 - GRPO now uses a shorter RL-specific prompt than SFT so rollout prompts fit within the 12 GB profile without truncating most samples.
 - Both training entry points now emit per-step JSONL/CSV logs, TensorBoard event logs, and PNG telemetry plots under each run's `model/` directory.
 

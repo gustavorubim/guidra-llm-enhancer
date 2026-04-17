@@ -500,6 +500,8 @@ def _config_snapshot(root: Path, profile: str) -> dict[str, Any]:
         "generations_per_prompt": training.get("generations_per_prompt"),
         "warmup_ratio": training.get("warmup_ratio"),
         "behavior_similarity_threshold": training.get("behavior_similarity_threshold"),
+        "execution_pass_rate_threshold": training.get("execution_pass_rate_threshold"),
+        "min_completion_ratio": training.get("min_completion_ratio"),
         "max_grad_norm": training.get("max_grad_norm"),
         "reward_weights": training.get("reward_weights", {}),
     }
@@ -710,6 +712,7 @@ def _render_runtime_prompt_contract(variant: int) -> str:
         "    )\n\n\n"
         "def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:\n"
         "    return {\n"
+        '        "task_type": record.get("task_type", "full_clarify"),\n'
         '        "source_function_name": record.get("source_function_name", ""),\n'
         '        "raw_code": record.get("raw_code", ""),\n'
         '        "compile_reference_source": record.get(\n'
@@ -719,6 +722,7 @@ def _render_runtime_prompt_contract(variant: int) -> str:
         '        "target_renamings": record.get("target_renamings", "{}"),\n'
         '        "allowed_imports": record.get("allowed_imports", "[]"),\n'
         '        "allowed_callees": record.get("allowed_callees", "[]"),\n'
+        '        "tests_ref": record.get("tests_ref") or "",\n'
         "    }\n"
     )
 
@@ -762,80 +766,24 @@ def _apply_reward_hard_safety_gate(root: Path, variant: int) -> list[str]:
     path = root / "src" / "decomp_clarifier" / "training" / "grpo" / "rewards.py"
     text = path.read_text(encoding="utf-8")
     compile_gate = {1: "0.0", 2: "0.0", 3: "0.0"}[variant]
-    behavior_gate = {1: "0.45", 2: "0.2", 3: "0.0"}[variant]
-    compile_penalty = {1: "0.0", 2: "0.25", 3: "0.5"}[variant]
-    behavior_penalty = {1: "0.0", 2: "0.15", 3: "0.25"}[variant]
-    text = re.sub(
-        r"_COMPILE_FAILURE_GATE = [0-9.]+",
-        f"_COMPILE_FAILURE_GATE = {compile_gate}",
-        text,
-    )
-    text = re.sub(
-        r"_BEHAVIOR_FAILURE_GATE = [0-9.]+",
-        f"_BEHAVIOR_FAILURE_GATE = {behavior_gate}",
-        text,
-    )
-    if "_COMPILE_FAILURE_PENALTY" not in text:
-        text, count = re.subn(
-            r"(_BEHAVIOR_FAILURE_GATE = [0-9.]+\n)",
-            (
-                r"\1"
-                f"_COMPILE_FAILURE_PENALTY = {compile_penalty}\n"
-                f"_BEHAVIOR_FAILURE_PENALTY = {behavior_penalty}\n"
-            ),
+    behavior_gate = {1: "0.0", 2: "0.0", 3: "0.0"}[variant]
+    compile_penalty = {1: "0.25", 2: "0.5", 3: "0.75"}[variant]
+    behavior_penalty = {1: "0.15", 2: "0.25", 3: "0.35"}[variant]
+    replacements = {
+        "_COMPILE_FAILURE_GATE": compile_gate,
+        "_BEHAVIOR_FAILURE_GATE": behavior_gate,
+        "_COMPILE_FAILURE_PENALTY": compile_penalty,
+        "_BEHAVIOR_FAILURE_PENALTY": behavior_penalty,
+    }
+    for constant, value in replacements.items():
+        updated, count = re.subn(
+            rf"{constant} = [0-9.]+",
+            f"{constant} = {value}",
             text,
-            count=1,
         )
         if count != 1:
-            raise LoopError("failed to insert hard safety penalty constants into rewards.py")
-    else:
-        text = re.sub(
-            r"_COMPILE_FAILURE_PENALTY = [0-9.]+",
-            f"_COMPILE_FAILURE_PENALTY = {compile_penalty}",
-            text,
-        )
-        text = re.sub(
-            r"_BEHAVIOR_FAILURE_PENALTY = [0-9.]+",
-            f"_BEHAVIOR_FAILURE_PENALTY = {behavior_penalty}",
-            text,
-        )
-    if "failure_penalty = 0.0" not in text:
-        text = _replace_required(
-            text,
-            "    penalty_total = (\n"
-            '        weights.get("hallucination_penalty", 1.0) * hallucination_value\n'
-            '        + weights.get("decompiler_type_penalty", 0.0) * decompiler_type_value\n'
-            "    )\n"
-            "    total = positive_total * gate_factor - penalty_total\n",
-            "    penalty_total = (\n"
-            '        weights.get("hallucination_penalty", 1.0) * hallucination_value\n'
-            '        + weights.get("decompiler_type_penalty", 0.0) * decompiler_type_value\n'
-            "    )\n"
-            "    failure_penalty = 0.0\n"
-            "    if not compile_success:\n"
-            '        failure_penalty += weights.get("compile", 1.0) * _COMPILE_FAILURE_PENALTY\n'
-            "    if not behavior_success:\n"
-            '        failure_penalty += weights.get("behavior", 1.0) * _BEHAVIOR_FAILURE_PENALTY\n'
-            "    total = positive_total * gate_factor - penalty_total - failure_penalty\n",
-        )
-    if '"failure_penalty": 0.0,' not in text:
-        text = _replace_required(
-            text,
-            '            "decompiler_type_penalty": 0.0,\n'
-            '            "gate_factor": 0.0,\n',
-            '            "decompiler_type_penalty": 0.0,\n'
-            '            "failure_penalty": 0.0,\n'
-            '            "gate_factor": 0.0,\n',
-        )
-    if '"failure_penalty": failure_penalty,' not in text:
-        text = _replace_required(
-            text,
-            '        "decompiler_type_penalty": decompiler_type_value,\n'
-            '        "gate_factor": gate_factor,\n',
-            '        "decompiler_type_penalty": decompiler_type_value,\n'
-            '        "failure_penalty": failure_penalty,\n'
-            '        "gate_factor": gate_factor,\n',
-        )
+            raise LoopError(f"failed to update {constant} in rewards.py")
+        text = updated
     path.write_text(text, encoding="utf-8")
     return ["src/decomp_clarifier/training/grpo/rewards.py"]
 
