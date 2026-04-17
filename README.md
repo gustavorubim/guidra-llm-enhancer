@@ -169,7 +169,7 @@ Current SFT defaults in `configs/training/sft_qwen35_2b.yaml`:
 
 | Setting | Default |
 |---|---|
-| Base model | `unsloth/Qwen3.5-2B` |
+| Base model | `Qwen/Qwen3.5-2B` |
 | Loader | `unsloth` |
 | Quantization | `4-bit` |
 | LoRA rank | `8` |
@@ -182,8 +182,8 @@ Canonical training profiles now include `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_g
 
 To run the full model matrix end to end:
 
-```bash
-python scripts/run_training_matrix.py
+```powershell
+.\scripts\run_training_matrix.ps1
 ```
 
 That orchestration script trains all four SFT profiles, all four GRPO profiles, evaluates all eight checkpoints, and refreshes both `artifacts/reports/model_matrix_summary.*` and `artifacts/reports/target_comparison_table.*`.
@@ -263,6 +263,14 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 .\scripts\verify_train_env.ps1
 python -m decomp_clarifier.cli train-sft --help
 python -m decomp_clarifier.cli train-grpo --help
+```
+
+If `.\scripts\verify_train_env.ps1` shows `torch ... +cpu` or `CUDA is not available`,
+repair the project venv with the official CUDA wheels:
+
+```powershell
+uv pip install --python .\.venv\Scripts\python.exe --reinstall torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128
+.\scripts\verify_train_env.ps1
 ```
 
 Use [pipeline_run.md](pipeline_run.md) for the full manual end-to-end runbook and verification checklist.

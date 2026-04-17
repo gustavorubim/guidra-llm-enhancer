@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,21 @@ from decomp_clarifier.evaluation.target_comparison import (  # noqa: E402
 )
 from decomp_clarifier.paths import ProjectPaths  # noqa: E402
 from decomp_clarifier.settings import load_app_config  # noqa: E402
+
+
+class _TeeWriter:
+    def __init__(self, *writers: Any) -> None:
+        self._writers = writers
+
+    def write(self, data: str) -> int:
+        for writer in self._writers:
+            writer.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for writer in self._writers:
+            writer.flush()
+
 
 MODEL_GROUPS = (
     {
@@ -71,6 +87,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inspection-sample-count", type=int, default=8)
     parser.add_argument("--max-new-tokens", type=int, default=384)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Do not stream child command output live; only write per-step log files.",
+    )
     return parser.parse_args()
 
 
@@ -98,22 +119,55 @@ def _parse_manifest_path(stdout: str) -> str:
     return lines[-1]
 
 
+def _step_count() -> int:
+    return sum(
+        len(group["sft_profiles"]) + len(group["grpo_profiles"]) + len(group["sft_profiles"]) + len(group["grpo_profiles"])
+        for group in MODEL_GROUPS
+    )
+
+
 def _run_cli_step(
     *,
     root: Path,
     run_dir: Path,
     env: dict[str, str],
     step_index: int,
+    total_steps: int,
     label: str,
     cli_args: list[str],
+    live_output: bool,
 ) -> dict[str, Any]:
     command = [sys.executable, "-m", "decomp_clarifier.cli", *cli_args]
-    result = run_subprocess(command, cwd=root, env=env)
+    env = dict(env)
+    env.setdefault("PYTHONUNBUFFERED", "1")
     stdout_path = run_dir / "steps" / f"{step_index:02d}-{label}.stdout.log"
     stderr_path = run_dir / "steps" / f"{step_index:02d}-{label}.stderr.log"
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
-    stdout_path.write_text(result.stdout, encoding="utf-8")
-    stderr_path.write_text(result.stderr, encoding="utf-8")
+
+    print()
+    print(f"[{step_index}/{total_steps}] {label}")
+    print("Command:", " ".join(command))
+    print("Stdout log:", stdout_path)
+    print("Stderr log:", stderr_path)
+    print("-" * 80)
+    started_at = time.perf_counter()
+    with stdout_path.open("w", encoding="utf-8") as stdout_log, stderr_path.open(
+        "w", encoding="utf-8"
+    ) as stderr_log:
+        stdout_sink: Any = stdout_log
+        stderr_sink: Any = stderr_log
+        if live_output:
+            stdout_sink = _TeeWriter(stdout_log, sys.stdout)
+            stderr_sink = _TeeWriter(stderr_log, sys.stderr)
+        result = run_subprocess(
+            command,
+            cwd=root,
+            env=env,
+            timeout_seconds=None,
+            stdout_sink=stdout_sink,
+            stderr_sink=stderr_sink,
+        )
+    elapsed_seconds = time.perf_counter() - started_at
 
     step_record: dict[str, Any] = {
         "label": label,
@@ -121,15 +175,22 @@ def _run_cli_step(
         "returncode": result.returncode,
         "stdout_log": str(stdout_path),
         "stderr_log": str(stderr_path),
+        "elapsed_seconds": round(elapsed_seconds, 2),
     }
     if result.returncode != 0:
         step_record["status"] = "failed"
         step_record["stdout_tail"] = "\n".join(result.stdout.splitlines()[-20:])
         step_record["stderr_tail"] = "\n".join(result.stderr.splitlines()[-20:])
+        print("-" * 80)
+        print(f"[{step_index}/{total_steps}] {label} failed after {elapsed_seconds:.1f}s")
         raise RuntimeError(json.dumps(step_record, indent=2))
 
     step_record["status"] = "completed"
     step_record["manifest_path"] = _parse_manifest_path(result.stdout)
+    print("-" * 80)
+    print(
+        f"[{step_index}/{total_steps}] {label} completed in {elapsed_seconds:.1f}s"
+    )
     return step_record
 
 
@@ -192,6 +253,7 @@ def main() -> None:
 
     try:
         step_index = 1
+        total_steps = _step_count()
 
         eval_manifest_paths: dict[str, str] = {}
         for group in MODEL_GROUPS:
@@ -201,7 +263,9 @@ def main() -> None:
                     run_dir=run_dir,
                     env=env,
                     step_index=step_index,
+                    total_steps=total_steps,
                     label=f"train-{profile}",
+                    live_output=not args.quiet,
                     cli_args=[
                         "train-sft",
                         "--training-profile",
@@ -220,7 +284,9 @@ def main() -> None:
                     run_dir=run_dir,
                     env=env,
                     step_index=step_index,
+                    total_steps=total_steps,
                     label=f"train-{profile}",
+                    live_output=not args.quiet,
                     cli_args=[
                         "train-grpo",
                         "--training-profile",
@@ -256,7 +322,9 @@ def main() -> None:
                     run_dir=run_dir,
                     env=env,
                     step_index=step_index,
+                    total_steps=total_steps,
                     label=f"eval-{profile}",
+                    live_output=not args.quiet,
                     cli_args=cli_args,
                 )
                 state["steps"].append(step)
@@ -287,7 +355,9 @@ def main() -> None:
                     run_dir=run_dir,
                     env=env,
                     step_index=step_index,
+                    total_steps=total_steps,
                     label=f"eval-{profile}",
+                    live_output=not args.quiet,
                     cli_args=cli_args,
                 )
                 state["steps"].append(step)

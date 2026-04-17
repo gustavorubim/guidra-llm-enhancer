@@ -107,6 +107,13 @@ Training is supported only on native Windows with NVIDIA CUDA.
 $env:PYTHONPATH = (Resolve-Path .\src).Path
 ```
 
+If the training venv ends up with `torch ... +cpu` instead of a CUDA build, repair it
+before continuing:
+
+```powershell
+uv pip install --python .\.venv\Scripts\python.exe --reinstall torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
 ### 2. Create `.env`
 
 Start from `.env.example`:
@@ -522,27 +529,6 @@ Or, if you made a custom profile:
 
 ```powershell
 python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_from_sft
-
-### 10. Run The Full Model Matrix
-
-If you want to run the canonical Qwen + Gemma matrix end to end, use:
-
-```powershell
-python scripts/run_training_matrix.py
-```
-
-This runs:
-
-- `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it`
-- `grpo_qwen35_2b`, `grpo_qwen35_4b`, `grpo_gemma4_e2b_it`, `grpo_gemma4_e4b_it`
-- all 8 matching checkpoint eval commands
-
-It also refreshes:
-
-- `artifacts/reports/model_matrix_summary.md`
-- `artifacts/reports/model_matrix_summary.json`
-- `artifacts/reports/target_comparison_table.md`
-- `artifacts/reports/target_comparison_table.json`
 ```
 
 Expected output path:
@@ -584,6 +570,27 @@ Important note:
 
 - `rl_records.jsonl` now uses a compact GRPO-specific prompt rather than the full SFT prompt. This keeps most rollout prompts under the `896` token cap in the 12 GB profile.
 - The default GRPO reward stack now prefers execution-backed behavior checks when `tests_ref` resolves to a generated project manifest, falls back to the similarity proxy otherwise, and only unlocks cleanup or readability bonuses after compile and behavior pass.
+
+### 10. Run The Full Model Matrix
+
+If you want to run the canonical Qwen + Gemma matrix end to end, use:
+
+```powershell
+.\scripts\run_training_matrix.ps1
+```
+
+This runs:
+
+- `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it`
+- `grpo_qwen35_2b`, `grpo_qwen35_4b`, `grpo_gemma4_e2b_it`, `grpo_gemma4_e4b_it`
+- all 8 matching checkpoint eval commands
+
+It also refreshes:
+
+- `artifacts/reports/model_matrix_summary.md`
+- `artifacts/reports/model_matrix_summary.json`
+- `artifacts/reports/target_comparison_table.md`
+- `artifacts/reports/target_comparison_table.json`
 
 ### 9.5 Evaluate The GRPO Checkpoint
 

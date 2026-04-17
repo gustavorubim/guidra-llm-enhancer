@@ -1,5 +1,5 @@
 model:
-  base_model_id: unsloth/Qwen3.5-2B
+  base_model_id: Qwen/Qwen3.5-2B
   loader_variant: unsloth
 training:
   max_seq_length: 2048

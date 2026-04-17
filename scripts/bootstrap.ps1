@@ -4,6 +4,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$torchVersion = "2.10.0"
+$torchvisionVersion = "0.25.0"
+$pytorchCudaIndex = "https://download.pytorch.org/whl/cu128"
 
 Push-Location $repoRoot
 try {
@@ -15,6 +18,15 @@ try {
     uv venv .venv --python 3.13
     & .\.venv\Scripts\Activate.ps1
     uv pip install -e $extras
+
+    if ($Training) {
+        # Installing from the default index can still yield a CPU-only torch wheel.
+        # Force the pinned Windows CUDA build used by the training stack.
+        uv pip install --python .\.venv\Scripts\python.exe --reinstall `
+            "torch==$torchVersion" `
+            "torchvision==$torchvisionVersion" `
+            --index-url $pytorchCudaIndex
+    }
 
     if ($Training) {
         Write-Host "Run commands with `$env:PYTHONPATH = (Resolve-Path .\src).Path; python -m decomp_clarifier.cli ..."

@@ -85,6 +85,35 @@ def _version_with_fallback(name: str):
     return _ORIGINAL_METADATA_VERSION(name)
 
 
+def test_model_source_access_sets_offline_mode_for_cached_remote_model(monkeypatch) -> None:
+    from decomp_clarifier.training.sft import model as sft_model
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.setattr(sft_model, "_is_local_model_reference", lambda model_name: False)
+    monkeypatch.setattr(
+        sft_model,
+        "_cached_remote_snapshot_dir",
+        lambda model_name: Path("C:/hf-cache/Qwen3.5-2B"),
+    )
+    monkeypatch.setattr(sft_model, "_can_resolve_huggingface", lambda: False)
+
+    resolved = sft_model._resolve_model_source("Qwen/Qwen3.5-2B")
+
+    assert Path(resolved) == Path("C:/hf-cache/Qwen3.5-2B")
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+
+
+def test_model_source_access_raises_clear_error_for_uncached_remote_model(monkeypatch) -> None:
+    from decomp_clarifier.training.sft import model as sft_model
+
+    monkeypatch.setattr(sft_model, "_is_local_model_reference", lambda model_name: False)
+    monkeypatch.setattr(sft_model, "_cached_remote_snapshot_dir", lambda model_name: None)
+    monkeypatch.setattr(sft_model, "_can_resolve_huggingface", lambda: False)
+
+    with pytest.raises(RuntimeError, match="Restore DNS/internet access to Hugging Face"):
+        sft_model._resolve_model_source("unsloth/gemma-4-E2B-it")
+
+
 def test_training_utilities_and_rewards(
     monkeypatch, tmp_path: Path, sample_dataset_samples
 ) -> None:
