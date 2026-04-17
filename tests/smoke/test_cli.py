@@ -355,7 +355,9 @@ def test_cli_workflow_smoke(
     )
     monkeypatch.setattr(
         "decomp_clarifier.evaluation.checkpoint_eval.find_latest_completed_checkpoint",
-        lambda paths, stage: temp_paths.runs_dir / f"train-{stage}-latest" / "model",
+        lambda paths, stage, training_profile=None: temp_paths.runs_dir
+        / f"train-{stage}-latest"
+        / "model",
     )
 
     dataset_file = temp_paths.processed_sft_dir / "function_dataset.jsonl"

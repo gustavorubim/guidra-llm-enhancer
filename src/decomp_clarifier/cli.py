@@ -770,7 +770,7 @@ def run_baselines(
             from decomp_clarifier.dataset.prompt_formatter import format_rl_prompt
             from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
 
-            base_config = load_training_config(root, "grpo_qwen35_2b_12gb")
+            base_config = load_training_config(root, "grpo_qwen35_2b")
             base_config.model.base_model_id = base_model_local_id
             base_qwen_predictor = CheckpointPredictor(
                 base_model_local_id,
@@ -1001,7 +1001,7 @@ def demo(
 
 @app.command("train-sft")
 def train_sft(
-    training_profile: str = typer.Option("sft_qwen35_2b_12gb"),
+    training_profile: str = typer.Option("sft_qwen35_2b"),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
@@ -1032,7 +1032,7 @@ def train_sft(
 
 @app.command("train-grpo")
 def train_grpo(
-    training_profile: str = typer.Option("grpo_qwen35_2b_12gb"),
+    training_profile: str = typer.Option("grpo_qwen35_2b"),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
@@ -1066,7 +1066,7 @@ def train_grpo(
 @app.command("eval-sft-checkpoint")
 def eval_sft_checkpoint(
     checkpoint_dir: Path | None = typer.Option(None),  # noqa: B008
-    training_profile: str = typer.Option("sft_qwen35_2b_12gb"),
+    training_profile: str = typer.Option("sft_qwen35_2b"),
     split: str = typer.Option("val"),
     sample_limit: int | None = typer.Option(None),
     inspection_sample_count: int = typer.Option(8),
@@ -1127,7 +1127,7 @@ def eval_sft_checkpoint(
 @app.command("eval-grpo-checkpoint")
 def eval_grpo_checkpoint(
     checkpoint_dir: Path | None = typer.Option(None),  # noqa: B008
-    training_profile: str = typer.Option("grpo_qwen35_2b_12gb"),
+    training_profile: str = typer.Option("grpo_qwen35_2b"),
     split: str = typer.Option("val"),
     sample_limit: int | None = typer.Option(None),
     inspection_sample_count: int = typer.Option(8),

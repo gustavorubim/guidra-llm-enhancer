@@ -487,7 +487,7 @@ Success criteria:
 Before running GRPO, verify what it will use:
 
 ```powershell
-Get-Content configs\training\grpo_qwen35_2b_12gb.yaml
+Get-Content configs\training\grpo_qwen35_2b.yaml
 ```
 
 If `model.base_model_id` is blank in that profile, the CLI will auto-resolve the latest finished `train-sft-*` run.
@@ -502,13 +502,13 @@ model:
 
 Recommended approach:
 
-- copy `configs/training/grpo_qwen35_2b_12gb.yaml` to a new file
+- copy `configs/training/grpo_qwen35_2b.yaml` to a new file
 - change only `model.base_model_id`
 - run `train-grpo --training-profile <your_new_profile_name>`
 
 Important note:
 
-The CLI loads exactly one training profile file. The `windows_cuda_16gb.yaml` and related files are not auto-composed on top of `sft_qwen35_2b_12gb.yaml` or `grpo_qwen35_2b_12gb.yaml`. If you need different memory settings, create a custom profile that bakes those values in.
+The CLI loads exactly one training profile file. If you need different memory settings, create a custom profile that bakes those values in.
 
 ### 9. Run GRPO
 
@@ -521,7 +521,28 @@ python -m decomp_clarifier.cli eval-grpo-checkpoint --split val
 Or, if you made a custom profile:
 
 ```powershell
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_12gb_from_sft
+python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_from_sft
+
+### 10. Run The Full Model Matrix
+
+If you want to run the canonical Qwen + Gemma matrix end to end, use:
+
+```powershell
+python scripts/run_training_matrix.py
+```
+
+This runs:
+
+- `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it`
+- `grpo_qwen35_2b`, `grpo_qwen35_4b`, `grpo_gemma4_e2b_it`, `grpo_gemma4_e4b_it`
+- all 8 matching checkpoint eval commands
+
+It also refreshes:
+
+- `artifacts/reports/model_matrix_summary.md`
+- `artifacts/reports/model_matrix_summary.json`
+- `artifacts/reports/target_comparison_table.md`
+- `artifacts/reports/target_comparison_table.json`
 ```
 
 Expected output path:
@@ -708,6 +729,6 @@ python -m decomp_clarifier.cli eval
 python -m decomp_clarifier.cli report
 python -m decomp_clarifier.cli train-sft
 python -m decomp_clarifier.cli eval-sft-checkpoint --split val
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_12gb_from_sft
+python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_from_sft
 python -m decomp_clarifier.cli eval-grpo-checkpoint --split val
 ```

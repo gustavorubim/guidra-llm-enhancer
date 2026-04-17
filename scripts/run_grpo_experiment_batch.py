@@ -328,7 +328,7 @@ def _configure_training_config(
     base_checkpoint: Path,
     experiment: ExperimentSpec,
 ) -> Any:
-    config = load_training_config(root, "grpo_qwen35_2b_12gb")
+    config = load_training_config(root, "grpo_qwen35_2b")
     config.model.base_model_id = str(base_checkpoint)
     config.training.max_steps = experiment.max_steps
     config.training.save_steps = experiment.max_steps
@@ -345,7 +345,7 @@ def _run_sft_reference_eval(
     batch_dir: Path,
     logger: logging.Logger,
 ) -> dict[str, Any]:
-    config = load_training_config(root, "sft_qwen35_2b_12gb")
+    config = load_training_config(root, "sft_qwen35_2b")
     config.model.base_model_id = str(sft_checkpoint)
     output_dir = batch_dir / "sft_reference_compact_eval"
     result = _evaluate_checkpoint(

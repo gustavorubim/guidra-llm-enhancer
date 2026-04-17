@@ -1,13 +1,20 @@
 model:
-  base_model_id: Qwen/Qwen3.5-4B
+  base_model_id:
+  source_training_profile: sft_qwen35_4b
   loader_variant: unsloth
 training:
   max_seq_length: 1536
   load_in_4bit: true
-  max_prompt_length: 1024
-  max_completion_length: 512
+  precision: bf16
+  lora_rank: 16
+  batch_size: 1
+  grad_accum_steps: 1
+  epochs: 1
+  max_steps: 300
+  max_prompt_length: 896
+  max_completion_length: 384
   generations_per_prompt: 16
-  learning_rate: 5.0e-6
+  learning_rate: 2.0e-6
   adam_beta1: 0.9
   adam_beta2: 0.99
   weight_decay: 0.1
@@ -15,13 +22,15 @@ training:
   lr_scheduler_type: cosine
   optim: adamw_8bit
   max_grad_norm: 0.1
-  save_steps: 100
+  save_steps: 300
   behavior_similarity_threshold: 0.35
   reward_weights:
     format: 1.0
     cleanup: 1.5
     naming: 1.5
-    compile: 2.0
-    behavior: 1.5
+    compile: 3.0
+    behavior: 2.0
     readability: 1.0
+    signature: 1.0
     hallucination_penalty: 2.0
+    decompiler_type_penalty: 1.0

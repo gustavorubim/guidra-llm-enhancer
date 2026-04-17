@@ -1,11 +1,12 @@
 model:
   base_model_id:
-  source_training_profile: sft_qwen35_4b_12gb
+  source_training_profile: sft_gemma4_e2b_it
   loader_variant: unsloth
 training:
   max_seq_length: 1536
   load_in_4bit: true
   precision: bf16
+  lora_rank: 8
   batch_size: 1
   grad_accum_steps: 1
   epochs: 1

@@ -1,16 +1,16 @@
 model:
   base_model_id:
-  source_training_profile: sft_qwen35_2b_12gb
+  source_training_profile: sft_gemma4_e4b_it
   loader_variant: unsloth
 training:
   max_seq_length: 1536
   load_in_4bit: true
   precision: bf16
-  lora_rank: 8
+  lora_rank: 16
   batch_size: 1
   grad_accum_steps: 1
   epochs: 1
-  max_steps: 1000
+  max_steps: 300
   max_prompt_length: 896
   max_completion_length: 384
   generations_per_prompt: 16
@@ -22,7 +22,7 @@ training:
   lr_scheduler_type: cosine
   optim: adamw_8bit
   max_grad_norm: 0.1
-  save_steps: 1000
+  save_steps: 300
   behavior_similarity_threshold: 0.35
   reward_weights:
     format: 1.0

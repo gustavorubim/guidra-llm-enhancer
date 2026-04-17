@@ -5,6 +5,7 @@ import pytest
 from decomp_clarifier.evaluation.target_comparison import (
     TARGET_COLUMNS,
     build_target_comparison_systems,
+    build_target_comparison_systems_from_manifests,
     find_latest_checkpoint_eval_manifest,
     render_target_comparison_table,
 )
@@ -145,6 +146,55 @@ def test_build_target_comparison_systems_supports_extra_manifests() -> None:
     assert (
         "| json_valid_rate | 1.000 | -- | -- | -- | 0.900 | 0.880 | -- | -- | -- | 0.950 | "
         "0.930 |" in table
+    )
+
+
+def test_build_target_comparison_systems_from_manifests_supports_matrix_columns() -> None:
+    baseline_metrics = {
+        "raw_ghidra": {
+            "json_valid_rate": 1.0,
+            "readability_score": 0.53,
+        },
+        "prompt_only_cleanup": {
+            "json_valid_rate": 1.0,
+            "readability_score": 0.72,
+        },
+    }
+    manifests = {
+        "sft_qwen35_2b": {
+            "stage": "sft",
+            "metrics": {"json_valid_rate": 0.91, "readability_score": 0.80},
+            "baseline_metrics": baseline_metrics,
+        },
+        "grpo_qwen35_2b": {
+            "stage": "grpo",
+            "metrics": {"json_valid_rate": 0.89, "readability_score": 0.82},
+            "baseline_metrics": baseline_metrics,
+        },
+        "sft_gemma4_e2b_it": {
+            "stage": "sft",
+            "metrics": {"json_valid_rate": 0.87, "readability_score": 0.78},
+            "baseline_metrics": baseline_metrics,
+        },
+    }
+
+    systems = build_target_comparison_systems_from_manifests(manifests)
+    columns = [
+        "raw_ghidra",
+        "prompt_only_cleanup",
+        "sft_qwen35_2b",
+        "grpo_qwen35_2b",
+        "sft_gemma4_e2b_it",
+    ]
+    table = render_target_comparison_table(systems, columns=columns)
+
+    assert list(systems)[:2] == ["raw_ghidra", "naming_only"]
+    assert systems["sft_qwen35_2b"]["json_valid_rate"] == pytest.approx(0.91)
+    assert systems["prompt_only_cleanup"]["readability_score"] == pytest.approx(0.72)
+    assert (
+        table.splitlines()[0]
+        == "| Metric | raw_ghidra | prompt_only_cleanup | sft_qwen35_2b | grpo_qwen35_2b | "
+        "sft_gemma4_e2b_it |"
     )
 
 

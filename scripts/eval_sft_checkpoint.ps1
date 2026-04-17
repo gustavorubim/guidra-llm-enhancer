@@ -1,6 +1,6 @@
 param(
     [string]$CheckpointDir = "",
-    [string]$TrainingProfile = "sft_qwen35_2b_12gb",
+    [string]$TrainingProfile = "sft_qwen35_2b",
     [string]$Split = "val",
     [int]$InspectionSampleCount = 8,
     [int]$MaxNewTokens = 384,

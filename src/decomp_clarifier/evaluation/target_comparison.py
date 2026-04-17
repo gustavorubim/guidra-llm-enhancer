@@ -4,6 +4,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+BASELINE_COLUMNS = [
+    "raw_ghidra",
+    "naming_only",
+    "base_qwen",
+    "base_qwen_openrouter",
+    "prompt_only_cleanup",
+    "generation_model",
+    "strong_model",
+]
+
 TARGET_COLUMNS = [
     "raw_ghidra",
     "naming_only",
@@ -104,17 +114,43 @@ def build_target_comparison_systems(
     *,
     extra_manifests: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, float]]:
-    extra_manifests = extra_manifests or {}
-    baseline_metrics = _merge_baseline_metrics(
-        [sft_manifest, grpo_manifest, *extra_manifests.values()]
+    manifests = {"sft": sft_manifest, "grpo": grpo_manifest, **(extra_manifests or {})}
+    return build_target_comparison_systems_from_manifests(
+        manifests,
+        baseline_columns=[
+            "raw_ghidra",
+            "naming_only",
+            "base_qwen",
+            "base_qwen_openrouter",
+            "prompt_only_cleanup",
+            "generation_model",
+            "strong_model",
+        ],
+        pinned_columns=TARGET_COLUMNS,
     )
-    systems = {column: {} for column in [*TARGET_COLUMNS, *extra_manifests]}
+
+
+def build_target_comparison_systems_from_manifests(
+    manifests_by_label: dict[str, dict[str, Any]],
+    *,
+    baseline_columns: list[str] | None = None,
+    pinned_columns: list[str] | None = None,
+) -> dict[str, dict[str, float]]:
+    baseline_columns = baseline_columns or BASELINE_COLUMNS
+    pinned_columns = pinned_columns or baseline_columns
+    baseline_metrics = _merge_baseline_metrics(list(manifests_by_label.values()))
+    unexpected_baselines = sorted(
+        name
+        for name in baseline_metrics
+        if name not in pinned_columns and name not in manifests_by_label
+    )
+    ordered_columns = [*pinned_columns, *manifests_by_label, *unexpected_baselines]
+    systems = {column: {} for column in ordered_columns}
     for system_name, metrics in baseline_metrics.items():
-        if system_name in systems:
-            systems[system_name] = dict(metrics)
-    systems["sft"] = _coerce_metrics(sft_manifest.get("metrics", {}), context="sft.metrics")
-    systems["grpo"] = _coerce_metrics(grpo_manifest.get("metrics", {}), context="grpo.metrics")
-    for label, manifest in extra_manifests.items():
+        if system_name not in systems:
+            systems[system_name] = {}
+        systems[system_name] = dict(metrics)
+    for label, manifest in manifests_by_label.items():
         systems[label] = _coerce_metrics(manifest.get("metrics", {}), context=f"{label}.metrics")
     return systems
 

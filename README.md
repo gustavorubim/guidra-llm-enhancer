@@ -117,7 +117,7 @@ Current reward components:
 | `hallucination_penalty` | `0.0+` penalty | Fewer invented calls | Penalizes calls not present in the binary-grounded imports/callees context |
 | `decompiler_type_penalty` | `0.0+` penalty | Fewer Ghidra pseudo-types | Penalizes artifacts like `undefined8`, `ulong64`, `ulonglong`, and `longlong` |
 
-Default GRPO weights from `configs/training/grpo_qwen35_2b_12gb.yaml`:
+Default GRPO weights from `configs/training/grpo_qwen35_2b.yaml`:
 
 | Weight key | Default |
 |---|---|
@@ -163,20 +163,28 @@ Current training stages:
 6. `train-sft` writes loss telemetry, and `train-grpo` writes reward telemetry, as JSONL/CSV logs plus TensorBoard and PNG artifacts.
 7. `eval-sft-checkpoint` and `eval-grpo-checkpoint` load a finished checkpoint, generate predictions over a held-out split, score them with the verifier stack, and write side-by-side inspection samples.
 
-Current SFT defaults in `configs/training/sft_qwen35_2b_12gb.yaml`:
+Current SFT defaults in `configs/training/sft_qwen35_2b.yaml`:
 
 | Setting | Default |
 |---|---|
-| Base model | `Qwen/Qwen3.5-2B` |
+| Base model | `unsloth/Qwen3.5-2B` |
 | Loader | `unsloth` |
 | Quantization | `4-bit` |
 | LoRA rank | `8` |
-| Max sequence length | `2000` |
+| Max sequence length | `2048` |
 | Batch size | `1` |
 | Gradient accumulation | `4` |
 | Epochs | `1` |
 
-The default training profiles are tuned for a `12 GB` class GPU. The older `4B` profiles are still available under `configs/training/` for larger cards. Hardware overlays are available in `configs/training/windows_cuda_16gb.yaml`, `configs/training/windows_cuda_24gb.yaml`, and `configs/training/windows_cuda_48gb.yaml` to reduce or expand sequence length and batch size for different GPUs.
+Canonical training profiles now include `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it` plus matching `grpo_*` profiles.
+
+To run the full model matrix end to end:
+
+```bash
+python scripts/run_training_matrix.py
+```
+
+That orchestration script trains all four SFT profiles, all four GRPO profiles, evaluates all eight checkpoints, and refreshes both `artifacts/reports/model_matrix_summary.*` and `artifacts/reports/target_comparison_table.*`.
 
 What is not wired yet:
 

@@ -1,11 +1,11 @@
 model:
-  base_model_id: Qwen/Qwen3.5-4B
+  base_model_id: unsloth/gemma-4-E2B-it
   loader_variant: unsloth
 training:
-  max_seq_length: 1536
+  max_seq_length: 2048
   load_in_4bit: true
   precision: bf16
-  lora_rank: 16
+  lora_rank: 8
   batch_size: 1
   grad_accum_steps: 4
   epochs: 1

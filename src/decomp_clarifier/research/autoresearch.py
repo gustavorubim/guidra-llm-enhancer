@@ -18,10 +18,10 @@ import yaml
 from decomp_clarifier.inference.formatter import normalize_output_with_status
 from decomp_clarifier.paths import ProjectPaths
 
-DEFAULT_PROFILE = "grpo_qwen35_2b_12gb"
+DEFAULT_PROFILE = "grpo_qwen35_2b"
 STOP_SECTION = "## STOP"
 EXPERIMENT_SURFACE = (
-    "configs/training/grpo_qwen35_2b_12gb.yaml",
+    "configs/training/grpo_qwen35_2b.yaml",
     "src/decomp_clarifier/training/grpo/rewards.py",
     "src/decomp_clarifier/training/grpo/train.py",
     "src/decomp_clarifier/training/grpo/data.py",
@@ -730,18 +730,18 @@ def _apply_runtime_prompt_contract(root: Path, variant: int) -> list[str]:
 
 
 def _apply_reward_format_bias(root: Path, variant: int) -> list[str]:
-    path = root / "configs" / "training" / "grpo_qwen35_2b_12gb.yaml"
+    path = root / "configs" / "training" / "grpo_qwen35_2b.yaml"
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     weights = payload.setdefault("training", {}).setdefault("reward_weights", {})
     weights["format"] = round(1.0 + 0.2 * variant, 2)
     weights["cleanup"] = round(max(1.0, 1.5 - 0.1 * variant), 2)
     weights["readability"] = round(max(0.7, 1.0 - 0.1 * variant), 2)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    return ["configs/training/grpo_qwen35_2b_12gb.yaml"]
+    return ["configs/training/grpo_qwen35_2b.yaml"]
 
 
 def _apply_reward_safety_bias(root: Path, variant: int) -> list[str]:
-    path = root / "configs" / "training" / "grpo_qwen35_2b_12gb.yaml"
+    path = root / "configs" / "training" / "grpo_qwen35_2b.yaml"
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     weights = payload.setdefault("training", {}).setdefault("reward_weights", {})
     weights["compile"] = round(3.0 + 0.25 * variant, 2)
@@ -749,7 +749,7 @@ def _apply_reward_safety_bias(root: Path, variant: int) -> list[str]:
     weights["cleanup"] = round(max(1.0, 1.5 - 0.1 * variant), 2)
     weights["readability"] = round(max(0.8, 1.0 - 0.05 * variant), 2)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    return ["configs/training/grpo_qwen35_2b_12gb.yaml"]
+    return ["configs/training/grpo_qwen35_2b.yaml"]
 
 
 def _replace_required(text: str, old: str, new: str) -> str:
@@ -841,7 +841,7 @@ def _apply_reward_hard_safety_gate(root: Path, variant: int) -> list[str]:
 
 
 def _apply_reward_signature_bias(root: Path, variant: int) -> list[str]:
-    path = root / "configs" / "training" / "grpo_qwen35_2b_12gb.yaml"
+    path = root / "configs" / "training" / "grpo_qwen35_2b.yaml"
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     weights = payload.setdefault("training", {}).setdefault("reward_weights", {})
     weights["signature"] = round(1.5 + 0.5 * variant, 2)
@@ -850,11 +850,11 @@ def _apply_reward_signature_bias(root: Path, variant: int) -> list[str]:
     weights["hallucination_penalty"] = round(2.0 + 0.25 * variant, 2)
     weights["decompiler_type_penalty"] = round(1.0 + 0.25 * variant, 2)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    return ["configs/training/grpo_qwen35_2b_12gb.yaml"]
+    return ["configs/training/grpo_qwen35_2b.yaml"]
 
 
 def _apply_rollout_cooling(root: Path, variant: int) -> list[str]:
-    path = root / "configs" / "training" / "grpo_qwen35_2b_12gb.yaml"
+    path = root / "configs" / "training" / "grpo_qwen35_2b.yaml"
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     training = payload.setdefault("training", {})
     learning_rates = {1: 1.5e-06, 2: 1.0e-06, 3: 7.5e-07}
@@ -865,7 +865,7 @@ def _apply_rollout_cooling(root: Path, variant: int) -> list[str]:
     training["generations_per_prompt"] = generations[variant]
     training["max_completion_length"] = completion_lengths[variant]
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    return ["configs/training/grpo_qwen35_2b_12gb.yaml"]
+    return ["configs/training/grpo_qwen35_2b.yaml"]
 
 
 def _apply_experiment(root: Path, choice: ExperimentChoice) -> list[str]:

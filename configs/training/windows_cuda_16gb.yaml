@@ -1,4 +1,0 @@
-hardware:
-  profile: windows_cuda_16gb
-  max_seq_length: 2048
-  batch_size: 1
