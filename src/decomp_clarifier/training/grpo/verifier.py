@@ -35,6 +35,8 @@ def verify_output(
     execution_result = evaluate_execution_behavior(
         output.cleaned_c,
         source_function_name=sample.source_function_name,
+        compiler_executable=sample.compiler_executable,
+        compiler_family=sample.compiler,
         tests_ref=sample.tests_ref or "",
     )
     if execution_result is not None:

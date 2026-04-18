@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from decomp_clarifier.settings import TrainingConfig
-from decomp_clarifier.training.sft.data import combine_prompt_and_response
+from decomp_clarifier.training.sft.data import prompt_completion_from_record
 from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.telemetry import (
@@ -24,6 +24,23 @@ def _dataset_size(dataset: object) -> int | None:
         return len(dataset)  # type: ignore[arg-type]
     except TypeError:
         return None
+
+
+def _precision_kwargs(precision: str | None) -> dict[str, bool]:
+    normalized = (precision or "").strip().lower()
+    if normalized == "bf16":
+        return {"bf16": True}
+    if normalized == "fp16":
+        return {"fp16": True}
+    return {}
+
+
+def _is_conversational_dataset(dataset: object) -> bool:
+    try:
+        sample = next(iter(dataset))
+    except (TypeError, StopIteration):
+        return False
+    return isinstance(sample, dict) and "prompt" in sample and "completion" in sample
 
 
 def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfig) -> Path:
@@ -47,6 +64,11 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
     model, tokenizer = load_model_and_tokenizer(config)
     text_tokenizer = getattr(tokenizer, "tokenizer", tokenizer)
     eos_token = getattr(text_tokenizer, "eos_token", None)
+    if getattr(text_tokenizer, "pad_token", None) is None and eos_token is not None:
+        try:
+            setattr(text_tokenizer, "pad_token", eos_token)
+        except (AttributeError, TypeError):
+            logger.debug("tokenizer does not expose a mutable pad_token attribute")
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
     dataset_size = _dataset_size(dataset)
     logger.info(
@@ -62,9 +84,8 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
             f"training dataset has only {dataset_size} records; "
             f"min_train_samples requires at least {config.training.min_train_samples}"
         )
-    dataset = dataset.map(
-        lambda row: {"text": combine_prompt_and_response(row, eos_token=eos_token)}
-    )
+    dataset = dataset.map(prompt_completion_from_record)
+    conversational = _is_conversational_dataset(dataset)
 
     max_length = config.training.max_seq_length or 512
     max_steps = (
@@ -72,34 +93,54 @@ def run_sft_training(dataset_path: Path, output_dir: Path, config: TrainingConfi
         if getattr(config.training, "max_steps", None) is not None
         else -1
     )
+    sft_args: dict[str, object] = {
+        "output_dir": str(output_dir),
+        "logging_dir": str(telemetry.tensorboard_dir),
+        "logging_first_step": True,
+        "max_length": max_length,
+        "per_device_train_batch_size": config.training.batch_size or 1,
+        "gradient_accumulation_steps": config.training.grad_accum_steps or 1,
+        "num_train_epochs": config.training.epochs or 1,
+        "max_steps": max_steps,
+        "learning_rate": config.training.learning_rate if config.training.learning_rate is not None else 2e-4,
+        "logging_steps": 1,
+        "logging_strategy": "steps",
+        "report_to": ["tensorboard"],
+        "eos_token": eos_token,
+        "completion_only_loss": conversational,
+    }
+    optional_args = {
+        "adam_beta1": config.training.adam_beta1,
+        "adam_beta2": config.training.adam_beta2,
+        "weight_decay": config.training.weight_decay,
+        "warmup_ratio": config.training.warmup_ratio,
+        "lr_scheduler_type": config.training.lr_scheduler_type,
+        "optim": config.training.optim,
+        "max_grad_norm": config.training.max_grad_norm,
+        "save_steps": config.training.save_steps,
+    }
+    sft_args.update({key: value for key, value in optional_args.items() if value is not None})
+    sft_args.update(_precision_kwargs(config.training.precision))
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        tokenizer=text_tokenizer,
         train_dataset=dataset,
-        args=SFTConfig(
-            output_dir=str(output_dir),
-            logging_dir=str(telemetry.tensorboard_dir),
-            logging_first_step=True,
-            max_length=max_length,
-            per_device_train_batch_size=config.training.batch_size or 1,
-            gradient_accumulation_steps=config.training.grad_accum_steps or 1,
-            num_train_epochs=config.training.epochs or 1,
-            max_steps=max_steps,
-            learning_rate=2e-4,
-            logging_steps=1,
-            logging_strategy="steps",
-            report_to=["tensorboard"],
-        ),
+        args=SFTConfig(**sft_args),
         dataset_text_field="text",
         callbacks=[create_training_telemetry_callback(telemetry)],
     )
     logger.info(
-        "configured sft trainer max_length=%s batch_size=%s grad_accum=%s epochs=%s max_steps=%s",
+        "configured sft trainer max_length=%s batch_size=%s grad_accum=%s epochs=%s max_steps=%s "
+        "learning_rate=%s scheduler=%s completion_only_loss=%s conversational=%s",
         max_length,
         config.training.batch_size or 1,
         config.training.grad_accum_steps or 1,
         config.training.epochs or 1,
         max_steps,
+        sft_args["learning_rate"],
+        sft_args.get("lr_scheduler_type", "linear"),
+        conversational,
+        conversational,
     )
     train_result = trainer.train()
     trainer.save_model(str(output_dir))

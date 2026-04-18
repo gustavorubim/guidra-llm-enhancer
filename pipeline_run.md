@@ -579,11 +579,11 @@ If you want to run the canonical Qwen + Gemma matrix end to end, use:
 .\scripts\run_training_matrix.ps1
 ```
 
-This runs:
+This currently runs the active focused path only:
 
-- `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it`
-- `grpo_qwen35_2b`, `grpo_qwen35_4b`, `grpo_gemma4_e2b_it`, `grpo_gemma4_e4b_it`
-- all 8 matching checkpoint eval commands
+- `sft_qwen35_2b`
+- `grpo_qwen35_2b`
+- the matching SFT and GRPO checkpoint eval commands
 
 It also refreshes:
 
@@ -740,28 +740,21 @@ python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b_from
 python -m decomp_clarifier.cli eval-grpo-checkpoint --split val
 ```
 
-## Full Pipeline Command Reference
+## Focused Qwen Command Reference
 
-Use the block below for the matrix-specific runs: 8 training commands, 8 eval commands, and 1 report refresh command.
+Use the block below for the current active workflow: `Qwen3.5-2B` only.
+
+`Qwen` GRPO should be launched from an explicit validated SFT checkpoint via `--base-model-id`.
 
 Replace the `<path>` placeholders in the last line with the actual `checkpoint_eval_manifest.json` paths you want to include.
 
 ```powershell
+python -m decomp_clarifier.cli build-dataset --dataset-profile sft --app-profile default
+
 python -m decomp_clarifier.cli train-sft --training-profile sft_qwen35_2b --app-profile default
-python -m decomp_clarifier.cli train-sft --training-profile sft_gemma4_e2b_it --app-profile default
-python -m decomp_clarifier.cli train-sft --training-profile sft_qwen35_4b --app-profile default
-python -m decomp_clarifier.cli train-sft --training-profile sft_gemma4_e4b_it --app-profile default
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b --app-profile default
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_gemma4_e2b_it --app-profile default
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_4b --app-profile default
-python -m decomp_clarifier.cli train-grpo --training-profile grpo_gemma4_e4b_it --app-profile default
 python -m decomp_clarifier.cli eval-sft-checkpoint --training-profile sft_qwen35_2b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-sft-checkpoint --training-profile sft_gemma4_e2b_it --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-sft-checkpoint --training-profile sft_qwen35_4b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-sft-checkpoint --training-profile sft_gemma4_e4b_it --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-grpo-checkpoint --training-profile grpo_qwen35_2b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-grpo-checkpoint --training-profile grpo_gemma4_e2b_it --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-grpo-checkpoint --training-profile grpo_qwen35_4b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python -m decomp_clarifier.cli eval-grpo-checkpoint --training-profile grpo_gemma4_e4b_it --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
-python .\scripts\build_model_matrix_summary.py --app-profile default --eval-manifest "sft_qwen35_2b=<path-to-sft-qwen35-2b-checkpoint_eval_manifest.json>" --eval-manifest "grpo_qwen35_2b=<path-to-grpo-qwen35-2b-checkpoint_eval_manifest.json>" --eval-manifest "sft_gemma4_e2b_it=<path-to-sft-gemma4-e2b-it-checkpoint_eval_manifest.json>" --eval-manifest "grpo_gemma4_e2b_it=<path-to-grpo-gemma4-e2b-it-checkpoint_eval_manifest.json>" --eval-manifest "sft_qwen35_4b=<path-to-sft-qwen35-4b-checkpoint_eval_manifest.json>" --eval-manifest "grpo_qwen35_4b=<path-to-grpo-qwen35-4b-checkpoint_eval_manifest.json>" --eval-manifest "sft_gemma4_e4b_it=<path-to-sft-gemma4-e4b-it-checkpoint_eval_manifest.json>" --eval-manifest "grpo_gemma4_e4b_it=<path-to-grpo-gemma4-e4b-it-checkpoint_eval_manifest.json>"
+python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b --base-model-id <path-to-validated-qwen-sft-checkpoint> --app-profile default
+python -m decomp_clarifier.cli eval-grpo-checkpoint --checkpoint-dir <path-to-qwen-grpo-model-dir> --training-profile grpo_qwen35_2b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
+python .\scripts\build_model_matrix_summary.py --app-profile default --eval-manifest "sft_qwen35_2b=<path-to-sft-qwen35-2b-checkpoint_eval_manifest.json>" --eval-manifest "grpo_qwen35_2b=<path-to-grpo-qwen35-2b-checkpoint_eval_manifest.json>"
+
 ```

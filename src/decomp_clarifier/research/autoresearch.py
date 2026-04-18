@@ -78,6 +78,7 @@ class RewardTelemetrySnapshot:
     gate_factor_mean: float
     compile_mean: float
     behavior_mean: float
+    behavior_from_execution_mean: float
     json_valid_mean: float
     signature_mean: float
 
@@ -191,6 +192,7 @@ def choose_experiment(
     ) if recent_metric_payloads else json_valid_rate
     reward_collapse = (
         reward_telemetry is not None
+        and reward_telemetry.behavior_from_execution_mean >= 0.5
         and reward_telemetry.reward_mean >= 9.5
         and reward_telemetry.reward_std <= 1.0
         and reward_telemetry.gate_factor_mean >= 0.95
@@ -609,6 +611,9 @@ def _reward_telemetry_from_train_dir(train_dir: Path) -> RewardTelemetrySnapshot
             gate_factor_mean=float(row.get("components/gate_factor_mean", 0.0)),
             compile_mean=float(row.get("components/compile_mean", 0.0)),
             behavior_mean=float(row.get("components/behavior_mean", 0.0)),
+            behavior_from_execution_mean=float(
+                row.get("components/behavior_from_execution_mean", 0.0)
+            ),
             json_valid_mean=float(row.get("components/json_valid_mean", 0.0)),
             signature_mean=float(row.get("components/signature_mean", 0.0)),
         )
@@ -678,7 +683,10 @@ def _render_runtime_prompt_contract(variant: int) -> str:
         "        if line.strip():\n"
         "            rows.append(json.loads(line))\n"
         "    return rows\n\n\n"
-        "def prompt_from_record(record: dict[str, Any]) -> str:\n"
+        "def prompt_from_record(record: dict[str, Any]) -> Any:\n"
+        "    prompt_messages = record.get(\"prompt_messages\")\n"
+        "    if prompt_messages:\n"
+        "        return prompt_messages\n"
         "    prompt = str(record.get(\"prompt\", \"\"))\n"
         "    normalized = prompt.replace(\"\\r\\n\", \"\\n\")\n"
         "    match = _PROMPT_SECTION_RE.search(normalized)\n"
@@ -722,6 +730,7 @@ def _render_runtime_prompt_contract(variant: int) -> str:
         '        "target_renamings": record.get("target_renamings", "{}"),\n'
         '        "allowed_imports": record.get("allowed_imports", "[]"),\n'
         '        "allowed_callees": record.get("allowed_callees", "[]"),\n'
+        '        "compiler_executable": record.get("compiler_executable"),\n'
         '        "tests_ref": record.get("tests_ref") or "",\n'
         "    }\n"
     )

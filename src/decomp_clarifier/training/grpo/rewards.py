@@ -17,11 +17,11 @@ from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 _DECOMPILER_TYPE_PATTERN = re.compile(
     r"\b(?:undefined\d*|ulong64|ulonglong|longlong|code|byte|word|dword|qword)\b"
 )
-_COMPILE_FAILURE_GATE = 0.0
-_BEHAVIOR_FAILURE_GATE = 0.0
-_COMPILE_FAILURE_PENALTY = 0.0
-_BEHAVIOR_FAILURE_PENALTY = 0.0
-_EXTRACTABLE_JSON_REWARD = 0.5
+_COMPILE_FAILURE_GATE = 0.4
+_BEHAVIOR_FAILURE_GATE = 0.75
+_COMPILE_FAILURE_PENALTY = 0.5
+_BEHAVIOR_FAILURE_PENALTY = 0.25
+_EXTRACTABLE_JSON_REWARD = 0.75
 _MIN_COMPLETION_TOKEN_COUNT = 5
 
 
@@ -292,8 +292,6 @@ def reward_breakdown(
     if compile_success and not behavior_success:
         failure_penalty += weights.get("behavior", 1.0) * _BEHAVIOR_FAILURE_PENALTY
     total = core_total + style_total - penalty_total - failure_penalty
-    if not compile_success:
-        total = min(total, 0.0)
     return {
         "json_valid": 1.0,
         "format": format_value,

@@ -17,14 +17,9 @@ $env:PYTHONPATH = (Resolve-Path (Join-Path $repoRoot "src")).Path
 
 $modelGroups = @(
     [ordered]@{
-        Name = "2b"
-        SftProfiles = @("sft_qwen35_2b", "sft_gemma4_e2b_it")
-        GrpoProfiles = @("grpo_qwen35_2b", "grpo_gemma4_e2b_it")
-    },
-    [ordered]@{
-        Name = "4b"
-        SftProfiles = @("sft_qwen35_4b", "sft_gemma4_e4b_it")
-        GrpoProfiles = @("grpo_qwen35_4b", "grpo_gemma4_e4b_it")
+        Name = "qwen35_2b"
+        SftProfiles = @("sft_qwen35_2b")
+        GrpoProfiles = @("grpo_qwen35_2b")
     }
 )
 

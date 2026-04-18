@@ -123,6 +123,7 @@ def test_choose_experiment_prefers_rollout_cooling_after_reward_collapse() -> No
             gate_factor_mean=1.0,
             compile_mean=1.0,
             behavior_mean=1.0,
+            behavior_from_execution_mean=1.0,
             json_valid_mean=1.0,
             signature_mean=0.9,
         ),

@@ -35,7 +35,11 @@ from decomp_clarifier.ghidra_export.parse_exports import (
     ParsedGhidraProject,
     parse_ghidra_export_dir,
 )
-from decomp_clarifier.inference.checkpoint_predictor import _encode_prompt, _text_tokenizer
+from decomp_clarifier.inference.checkpoint_predictor import (
+    _encode_prompt,
+    _prepare_generation_prompt,
+    _text_tokenizer,
+)
 from decomp_clarifier.inference.explain import summarize_improvements
 from decomp_clarifier.inference.formatter import normalize_output, normalize_output_with_status
 from decomp_clarifier.inference.runner import InferenceRunner
@@ -114,8 +118,11 @@ def test_parse_exports_align_dataset_and_export_runner(
     assert "#include <stdio.h>" in rl_records[0].compile_reference_source
     assert "strlen" in rl_records[0].allowed_callees
     assert sample_dataset_samples[0].source_function_name in rl_records[0].allowed_callees
+    assert rl_records[0].compiler_executable == sample_dataset_samples[0].compiler_executable
     assert rl_records[0].tests_ref == sample_dataset_samples[0].tests_ref
-    assert "Assembly:" not in rl_records[0].prompt
+    assert rl_records[0].prompt_messages[0].role == "user"
+    assert records[0].completion_messages[0].role == "assistant"
+    assert "Assembly:" in rl_records[0].prompt
     assert "Decompiler:" in rl_records[0].prompt
 
     class FakeAdapter:
@@ -406,9 +413,8 @@ def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:
         eos_token = "<eos>"
 
         def __call__(self, prompt, return_tensors):
-            assert prompt == "hello"
             assert return_tensors == "pt"
-            return {"input_ids": "plain"}
+            return {"input_ids": prompt}
 
     class FakeProcessor:
         def __init__(self) -> None:
@@ -424,8 +430,21 @@ def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:
 
     assert _text_tokenizer(tokenizer) is tokenizer
     assert _text_tokenizer(processor) is processor.tokenizer
-    assert _encode_prompt(tokenizer, "hello") == {"input_ids": "plain"}
+    assert _encode_prompt(tokenizer, "hello") == {"input_ids": "hello"}
     assert _encode_prompt(processor, "hello") == {"input_ids": "processor"}
+    assert _prepare_generation_prompt(tokenizer, tokenizer, "hello") == {"input_ids": "hello"}
+
+    class FakeChatTokenizer(FakeTokenizer):
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=True):
+            assert tokenize is False
+            assert add_generation_prompt is True
+            assert messages == [{"role": "user", "content": "hello"}]
+            return "<chat>hello</chat>"
+
+    chat_tokenizer = FakeChatTokenizer()
+    assert _prepare_generation_prompt(chat_tokenizer, chat_tokenizer, "hello") == {
+        "input_ids": "<chat>hello</chat>"
+    }
 
 
 def test_rl_prompt_is_compact_relative_to_sft_prompt(sample_dataset_samples) -> None:
@@ -434,8 +453,7 @@ def test_rl_prompt_is_compact_relative_to_sft_prompt(sample_dataset_samples) -> 
     rl_prompt = format_rl_prompt(sample)
 
     assert "Assembly:" in sft_prompt
-    assert "Assembly:" not in rl_prompt
-    assert len(rl_prompt) < len(sft_prompt)
+    assert rl_prompt == sft_prompt
 
 
 def test_logging_splitters_and_inventory_branches(tmp_path: Path, monkeypatch) -> None:

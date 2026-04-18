@@ -1033,12 +1033,22 @@ def train_sft(
 @app.command("train-grpo")
 def train_grpo(
     training_profile: str = typer.Option("grpo_qwen35_2b"),
+    base_model_id: str | None = typer.Option(
+        None,
+        help=(
+            "Optional local checkpoint/model path or Hugging Face model id to use as the "
+            "GRPO starting point. Overrides the profile's base_model_id/source_training_profile."
+        ),
+    ),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
         "train-grpo", app_profile=app_profile
     )
     training_config: TrainingConfig = load_training_config(paths.root, training_profile)
+    if base_model_id:
+        training_config.model.base_model_id = base_model_id
+        training_config.model.source_training_profile = None
     resolved_base_model = _resolve_grpo_base_model(paths, training_config)
     _write_resolved(
         run_dir / "resolved_config.yaml",

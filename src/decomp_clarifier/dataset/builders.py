@@ -14,6 +14,12 @@ from decomp_clarifier.schemas.generation import GeneratedProject
 from decomp_clarifier.settings import DatasetConfig
 
 
+def _compiler_executable_from_manifest(compile_manifest: CompileManifest) -> str | None:
+    if compile_manifest.compile_commands:
+        return compile_manifest.compile_commands[0].executable
+    return None
+
+
 def build_function_dataset(
     *,
     projects: list[GeneratedProject],
@@ -56,6 +62,7 @@ def build_function_dataset(
                     task_type=task_type,
                     host_os=compile_manifest.host_os,
                     compiler=compile_manifest.compiler_family,
+                    compiler_executable=_compiler_executable_from_manifest(compile_manifest),
                     opt_level=compile_manifest.opt_level,
                     binary_format=compile_manifest.binary_format,
                     source_function_name=aligned.source.name,

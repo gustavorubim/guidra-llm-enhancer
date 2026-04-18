@@ -60,6 +60,24 @@ def _encode_prompt(tokenizer_or_processor: Any, prompt: str) -> Any:
     return tokenizer_or_processor(prompt, return_tensors="pt")
 
 
+def _prepare_generation_prompt(
+    tokenizer_or_processor: Any,
+    text_tokenizer: Any,
+    prompt: str,
+) -> Any:
+    if hasattr(text_tokenizer, "apply_chat_template"):
+        try:
+            rendered_prompt = text_tokenizer.apply_chat_template(
+                [{"role": "user", "content": prompt}],
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            return _encode_prompt(text_tokenizer, rendered_prompt)
+        except Exception:  # noqa: BLE001 - fall back to raw prompt on tokenizer/template mismatch
+            pass
+    return _encode_prompt(text_tokenizer, prompt)
+
+
 class CheckpointPredictor:
     def __init__(
         self,
@@ -103,7 +121,7 @@ class CheckpointPredictor:
         temperature: float,
     ) -> PredictionRecord:
         prompt = f"{self.prompt_formatter(sample)}\n\n"
-        inputs = _encode_prompt(self.tokenizer, prompt)
+        inputs = _prepare_generation_prompt(self.tokenizer, self.text_tokenizer, prompt)
         inputs = {name: value.to("cuda:0") for name, value in inputs.items()}
 
         generation_kwargs: dict[str, Any] = {

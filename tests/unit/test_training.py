@@ -45,6 +45,7 @@ from decomp_clarifier.training.sft.callbacks import write_training_summary
 from decomp_clarifier.training.sft.data import (
     combine_prompt_and_response,
     load_sft_records,
+    prompt_completion_from_record,
 )
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.memory_profiles import select_memory_profile
@@ -311,10 +312,18 @@ def test_training_utilities_and_rewards(
     assert json.loads(summary_path.read_text(encoding="utf-8"))["loss"] == 0.1
 
     dataset_path = tmp_path / "sft.jsonl"
-    dataset_path.write_text('{"prompt":"p","response_json":"r"}\n', encoding="utf-8")
+    dataset_path.write_text(
+        '{"prompt":"p","response_json":"r","prompt_messages":[{"role":"user","content":"p"}],'
+        '"completion_messages":[{"role":"assistant","content":"r"}]}\n',
+        encoding="utf-8",
+    )
     records = load_sft_records(dataset_path)
     assert combine_prompt_and_response(records[0]) == "p\nr"
     assert combine_prompt_and_response(records[0], eos_token="<eos>") == "p\nr<eos>"
+    assert prompt_completion_from_record(records[0]) == {
+        "prompt": [{"role": "user", "content": "p"}],
+        "completion": [{"role": "assistant", "content": "r"}],
+    }
 
     sample = sample_dataset_samples[0]
     output = ClarifiedFunctionOutput(
@@ -324,7 +333,7 @@ def test_training_utilities_and_rewards(
         cleaned_c=sample.target_clean_code,
     )
     assert format_reward(output) == 1.0
-    assert format_reward(output, exact_json=False) == 0.5
+    assert format_reward(output, exact_json=False) == 0.75
     assert cleanup_reward(output, sample.ghidra_decompiled_code) >= 0.0
     assert naming_reward(output, sample.rename_map_target) == 1.0
     assert compile_reward(True) == 1.0
@@ -391,14 +400,18 @@ def test_training_utilities_and_rewards(
     assert verification.field_complete
 
     rl_path = tmp_path / "rl.jsonl"
-    rl_path.write_text('{"prompt":"prompt text"}\n', encoding="utf-8")
+    rl_path.write_text(
+        '{"prompt":"prompt text","prompt_messages":[{"role":"user","content":"prompt text"}]}\n',
+        encoding="utf-8",
+    )
     rl_records = load_rl_records(rl_path)
-    assert prompt_from_record(rl_records[0]) == "prompt text"
+    assert prompt_from_record(rl_records[0]) == [{"role": "user", "content": "prompt text"}]
     empty_fields = reward_fields_from_record({})
     assert empty_fields["task_type"] == "full_clarify"
     assert empty_fields["raw_code"] == ""
     assert empty_fields["compile_reference_source"] == ""
     assert empty_fields["target_renamings"] == "{}"
+    assert empty_fields["compiler_executable"] is None
     assert empty_fields["tests_ref"] == ""
 
     populated_fields = reward_fields_from_record(
@@ -412,12 +425,14 @@ def test_training_utilities_and_rewards(
             "target_renamings": '{"local_10":"result"}',
             "allowed_imports": '["printf"]',
             "allowed_callees": '["printf"]',
+            "compiler_executable": "clang",
             "tests_ref": "sample_project/project_manifest.json",
         }
     )
     assert populated_fields["task_type"] == "rename"
     assert populated_fields["source_function_name"] == "helper"
     assert populated_fields["compile_reference_source"].startswith("#include <stdio.h>")
+    assert populated_fields["compiler_executable"] == "clang"
     assert populated_fields["tests_ref"] == "sample_project/project_manifest.json"
 
     assert behavior_similarity("int helper(void) { return 0; }", "") == 0.0
@@ -484,6 +499,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
         target_renamings_json="{}",
         allowed_imports_json='["printf"]',
         allowed_callees_json='["printf"]',
+        compiler_executable="clang",
         tests_ref="",
         weights={
             "format": 0.0,
@@ -531,7 +547,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
             "decompiler_type_penalty": 0.0,
         },
     )
-    assert continuous_behavior_reward == pytest.approx(0.25)
+    assert continuous_behavior_reward == pytest.approx(0.0)
     regressive_behavior_reward = weighted_reward(
         output=ClarifiedFunctionOutput(
             summary="ok",
@@ -562,7 +578,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
             "decompiler_type_penalty": 0.0,
         },
     )
-    assert regressive_behavior_reward == 0.0
+    assert regressive_behavior_reward == pytest.approx(-0.25)
     compile_failure_capped_reward = weighted_reward(
         output=ClarifiedFunctionOutput(
             summary="ok",
@@ -593,7 +609,38 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
             "decompiler_type_penalty": 0.0,
         },
     )
-    assert compile_failure_capped_reward <= 0.0
+    compile_success_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={"local_10": "result"},
+            cleaned_c="int helper(void) { return 0; }",
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ undefined8 local_10; return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={"local_10": "result"},
+        compile_success=True,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 1.0,
+            "naming": 1.0,
+            "compile": 3.0,
+            "behavior": 3.0,
+            "readability": 1.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+        },
+    )
+    assert compile_failure_capped_reward > 0.0
+    assert compile_failure_capped_reward < compile_success_reward
 
     assert compute_completion_reward(
         completion=(
@@ -608,6 +655,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
         target_renamings_json="not valid json",
         allowed_imports_json="[]",
         allowed_callees_json="[]",
+        compiler_executable=None,
         tests_ref="",
         weights={},
     ) == 0.0
@@ -662,6 +710,38 @@ def test_execution_behavior_uses_project_tests(
     assert broken_result is not None
     assert broken_result.compile_success is True
     assert broken_result.pass_rate == pytest.approx(0.0)
+
+
+def test_execution_behavior_supports_real_generated_project_manifest() -> None:
+    compiler = resolve_clang_executable("clang")
+    if compiler is None:
+        pytest.skip("clang is required for execution-backed behavior checks")
+
+    root = Path(__file__).resolve().parents[2]
+    rl_path = root / "data" / "processed" / "rl" / "rl_records.jsonl"
+    if not rl_path.exists():
+        pytest.skip("rl_records.jsonl fixture is not available")
+
+    for line in rl_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        tests_ref = row.get("tests_ref")
+        if not tests_ref:
+            continue
+        result = evaluate_execution_behavior(
+            row["target_clean_code"],
+            source_function_name=row["source_function_name"],
+            compiler_executable=compiler,
+            compiler_family="clang",
+            tests_ref=tests_ref,
+        )
+        assert result is not None
+        assert result.compile_success is True
+        assert result.pass_rate == pytest.approx(1.0)
+        return
+
+    pytest.fail("expected at least one RL record with tests_ref")
 
 
 def test_min_train_samples_gate(monkeypatch, tmp_path: Path) -> None:

@@ -110,11 +110,31 @@ def _materialize_project(project: GeneratedProject, root: Path) -> None:
     )
 
 
+def _normalized_compiler_family(family: str | None) -> str:
+    normalized = (family or "").strip().lower()
+    if normalized in {"", "clang", "gcc", "cc"}:
+        return "clang"
+    return normalized
+
+
+def _compiler_executable_for_project(
+    project: GeneratedProject,
+    *,
+    compiler_executable: str | None,
+    compiler_family: str | None,
+) -> str:
+    if compiler_executable:
+        return compiler_executable
+    return _normalized_compiler_family(compiler_family or project.build.compiler_family)
+
+
 def evaluate_execution_behavior(
     candidate_code: str,
     *,
     source_function_name: str,
     tests_ref: str,
+    compiler_executable: str | None = None,
+    compiler_family: str | None = None,
 ) -> ExecutionBehaviorResult | None:
     project = _load_generated_project(tests_ref)
     if project is None or not project.tests:
@@ -128,8 +148,12 @@ def evaluate_execution_behavior(
         return None
     compile_config = CompileConfig(
         compiler=CompilerProfile(
-            family=candidate_project.build.compiler_family,
-            executable=candidate_project.build.compiler_family,
+            family=_normalized_compiler_family(compiler_family or candidate_project.build.compiler_family),
+            executable=_compiler_executable_for_project(
+                candidate_project,
+                compiler_executable=compiler_executable,
+                compiler_family=compiler_family,
+            ),
             c_standard=candidate_project.build.c_standard,
         )
     )

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
 
 
 class FunctionDatasetSample(BaseModel):
@@ -10,6 +17,7 @@ class FunctionDatasetSample(BaseModel):
     task_type: str
     host_os: str
     compiler: str
+    compiler_executable: str | None = None
     opt_level: str
     binary_format: str
     source_function_name: str
@@ -34,12 +42,15 @@ class PackedSFTRecord(BaseModel):
     task_type: str
     prompt: str
     response_json: str
+    prompt_messages: list[ChatMessage] = Field(default_factory=list)
+    completion_messages: list[ChatMessage] = Field(default_factory=list)
 
 
 class PackedRLRecord(BaseModel):
     sample_id: str
     task_type: str
     prompt: str
+    prompt_messages: list[ChatMessage] = Field(default_factory=list)
     source_function_name: str
     raw_code: str
     compile_reference_source: str
@@ -47,6 +58,7 @@ class PackedRLRecord(BaseModel):
     target_renamings: str
     allowed_imports: str
     allowed_callees: str
+    compiler_executable: str | None = None
     tests_ref: str | None = None
 
 

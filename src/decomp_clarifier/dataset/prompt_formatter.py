@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from decomp_clarifier.schemas.dataset import FunctionDatasetSample
+from decomp_clarifier.schemas.dataset import ChatMessage, FunctionDatasetSample
 
 
 def format_prompt(sample: FunctionDatasetSample) -> str:
@@ -30,20 +30,13 @@ def format_prompt(sample: FunctionDatasetSample) -> str:
     )
 
 
+def prompt_messages(prompt: str) -> list[ChatMessage]:
+    return [ChatMessage(role="user", content=prompt)]
+
+
+def completion_messages(response_json: str) -> list[ChatMessage]:
+    return [ChatMessage(role="assistant", content=response_json)]
+
+
 def format_rl_prompt(sample: FunctionDatasetSample) -> str:
-    return "\n".join(
-        [
-            "You are a binary-grounded code clarification assistant.",
-            f"Task: {sample.task_type}",
-            "Return exactly one JSON object with keys summary, confidence, renamings, cleaned_c.",
-            "Do not include markdown, commentary, XML tags, or <think> blocks.",
-            "",
-            "Decompiler:",
-            sample.ghidra_decompiled_code,
-            "",
-            f"Imports: {json.dumps(sample.imports)}",
-            f"Callees: {json.dumps(sample.callees)}",
-            f"Semantic summary: {sample.semantic_summary}",
-            "JSON:",
-        ]
-    )
+    return format_prompt(sample)

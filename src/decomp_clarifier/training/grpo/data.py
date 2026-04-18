@@ -13,7 +13,10 @@ def load_rl_records(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def prompt_from_record(record: dict[str, Any]) -> str:
+def prompt_from_record(record: dict[str, Any]) -> Any:
+    prompt_messages = record.get("prompt_messages")
+    if prompt_messages:
+        return prompt_messages
     return record["prompt"]
 
 
@@ -29,5 +32,6 @@ def reward_fields_from_record(record: dict[str, Any]) -> dict[str, Any]:
         "target_renamings": record.get("target_renamings", "{}"),
         "allowed_imports": record.get("allowed_imports", "[]"),
         "allowed_callees": record.get("allowed_callees", "[]"),
+        "compiler_executable": record.get("compiler_executable"),
         "tests_ref": record.get("tests_ref") or "",
     }

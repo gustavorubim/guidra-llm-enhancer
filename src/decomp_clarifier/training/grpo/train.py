@@ -58,6 +58,7 @@ def compute_completion_reward(
     target_renamings_json: str,
     allowed_imports_json: str,
     allowed_callees_json: str,
+    compiler_executable: str | None,
     tests_ref: str,
     weights: dict[str, float],
     behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
@@ -74,6 +75,7 @@ def compute_completion_reward(
         target_renamings_json=target_renamings_json,
         allowed_imports_json=allowed_imports_json,
         allowed_callees_json=allowed_callees_json,
+        compiler_executable=compiler_executable,
         tests_ref=tests_ref,
         weights=weights,
         behavior_threshold=behavior_threshold,
@@ -92,6 +94,7 @@ def compute_completion_reward_details(
     target_renamings_json: str,
     allowed_imports_json: str,
     allowed_callees_json: str,
+    compiler_executable: str | None,
     tests_ref: str,
     weights: dict[str, float],
     behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
@@ -110,6 +113,7 @@ def compute_completion_reward_details(
         execution_result = evaluate_execution_behavior(
             output.cleaned_c,
             source_function_name=source_function_name,
+            compiler_executable=compiler_executable,
             tests_ref=tests_ref,
         )
         if execution_result is not None:
@@ -177,6 +181,14 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 
     model, tokenizer = load_model_and_tokenizer(config)
+    text_tokenizer = getattr(tokenizer, "tokenizer", tokenizer)
+    if getattr(text_tokenizer, "pad_token", None) is None:
+        eos_token = getattr(text_tokenizer, "eos_token", None)
+        if eos_token is not None:
+            try:
+                setattr(text_tokenizer, "pad_token", eos_token)
+            except (AttributeError, TypeError):
+                logger.debug("tokenizer does not expose a mutable pad_token attribute")
     patched_model_count = ensure_model_warnings_issued(model)
     logger.info("patched warnings_issued on grpo model_chain_nodes=%s", patched_model_count)
     dataset = load_dataset("json", data_files=str(dataset_path), split="train")
@@ -241,6 +253,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         target_renamings: list[str] | None = None,
         allowed_imports: list[str] | None = None,
         allowed_callees: list[str] | None = None,
+        compiler_executable: list[str] | None = None,
         tests_ref: list[str] | None = None,
         **_: object,
     ) -> list[float]:
@@ -254,6 +267,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         renaming_maps = target_renamings or ["{}"] * n
         import_lists = allowed_imports or ["[]"] * n
         callee_lists = allowed_callees or ["[]"] * n
+        compiler_commands = compiler_executable or [None] * n
         test_refs = tests_ref or [""] * n
         details = [
             compute_completion_reward_details(
@@ -266,6 +280,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 target_renamings_json=renaming_maps[index % len(renaming_maps)],
                 allowed_imports_json=import_lists[index % len(import_lists)],
                 allowed_callees_json=callee_lists[index % len(callee_lists)],
+                compiler_executable=compiler_commands[index % len(compiler_commands)],
                 tests_ref=test_refs[index % len(test_refs)],
                 weights=weights,
                 behavior_threshold=behavior_threshold,
@@ -292,7 +307,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     max_steps = config.training.max_steps if config.training.max_steps is not None else -1
     trainer = GRPOTrainer(
         model=model,
-        processing_class=tokenizer,
+        processing_class=text_tokenizer,
         reward_funcs=[reward_func],
         train_dataset=dataset,
         args=GRPOConfig(

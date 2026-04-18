@@ -93,6 +93,32 @@ def parameter_types_from_signature(signature: str) -> list[str] | None:
     return types
 
 
+def parameter_names_from_signature(signature: str) -> list[str] | None:
+    match = _FUNCTION_HEADER.match(signature.strip())
+    if match is None:
+        return None
+    params = match.group("params").strip()
+    if not params or params == "void":
+        return []
+
+    names: list[str] = []
+    for raw_param in params.split(","):
+        param = raw_param.strip()
+        if not param or param == "...":
+            continue
+        param = _CALLING_CONVENTION_PATTERN.sub("", param)
+        param = re.sub(r"\s+", " ", param).strip()
+        param = re.sub(r"\s*\[[^\]]*\]", "[]", param)
+        match_name = re.match(
+            r"^(?P<prefix>.*?)(?P<name>[A-Za-z_]\w*)(?P<suffix>\s*(?:\[\])*)$",
+            param,
+        )
+        if match_name is None:
+            continue
+        names.append(match_name.group("name"))
+    return names
+
+
 def return_type_from_signature(signature: str) -> str | None:
     stripped = signature.strip()
     match = _FUNCTION_HEADER.match(stripped)
