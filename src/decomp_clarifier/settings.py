@@ -138,6 +138,8 @@ class TrainingRunConfig(BaseModel):
     behavior_similarity_threshold: float | None = None
     execution_pass_rate_threshold: float | None = None
     min_completion_ratio: float | None = None
+    max_completion_ratio: float | None = None
+    max_function_count: int | None = None
 
 
 class TrainingHardwareConfig(BaseModel):

@@ -33,6 +33,8 @@ from decomp_clarifier.training.windows_guard import (
 _BEHAVIOR_SIMILARITY_THRESHOLD = 0.35
 _EXECUTION_PASS_RATE_THRESHOLD = 1.0
 _MIN_COMPLETION_RATIO = 0.3
+_MAX_COMPLETION_RATIO = 1.75
+_MAX_FUNCTION_COUNT = 1
 
 
 def _dataset_size(dataset: object) -> int | None:
@@ -64,6 +66,8 @@ def compute_completion_reward(
     behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
     execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
     min_completion_ratio: float = _MIN_COMPLETION_RATIO,
+    max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> float:
     return compute_completion_reward_details(
         completion=completion,
@@ -81,6 +85,8 @@ def compute_completion_reward(
         behavior_threshold=behavior_threshold,
         execution_pass_rate_threshold=execution_pass_rate_threshold,
         min_completion_ratio=min_completion_ratio,
+        max_completion_ratio=max_completion_ratio,
+        max_function_count=max_function_count,
     )["total"]
 
 
@@ -100,6 +106,8 @@ def compute_completion_reward_details(
     behavior_threshold: float = _BEHAVIOR_SIMILARITY_THRESHOLD,
     execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
     min_completion_ratio: float = _MIN_COMPLETION_RATIO,
+    max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> dict[str, float]:
     try:
         output, schema_status = normalize_output_with_schema_status(completion)
@@ -153,6 +161,8 @@ def compute_completion_reward_details(
             weights=weights,
             task_type=task_type,
             min_completion_ratio=min_completion_ratio,
+            max_completion_ratio=max_completion_ratio,
+            max_function_count=max_function_count,
         )
     except Exception:  # noqa: BLE001
         return empty_reward_breakdown()
@@ -216,6 +226,16 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         config.training.min_completion_ratio
         if config.training.min_completion_ratio is not None
         else _MIN_COMPLETION_RATIO
+    )
+    max_completion_ratio = (
+        config.training.max_completion_ratio
+        if config.training.max_completion_ratio is not None
+        else _MAX_COMPLETION_RATIO
+    )
+    max_function_count = (
+        config.training.max_function_count
+        if config.training.max_function_count is not None
+        else _MAX_FUNCTION_COUNT
     )
     batch_size = config.training.batch_size or config.hardware.batch_size or 1
     grad_accum_steps = config.training.grad_accum_steps or 1
@@ -286,6 +306,8 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 behavior_threshold=behavior_threshold,
                 execution_pass_rate_threshold=execution_pass_rate_threshold,
                 min_completion_ratio=min_completion_ratio,
+                max_completion_ratio=max_completion_ratio,
+                max_function_count=max_function_count,
             )
             for index, completion in enumerate(completions)
         ]

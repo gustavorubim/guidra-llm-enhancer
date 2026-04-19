@@ -5,6 +5,7 @@ import re
 from decomp_clarifier.c_source import (
     extract_function_signature,
     function_name_from_signature_text,
+    iter_function_starts,
     normalize_function_signature,
     parameter_count_from_signature,
     parameter_types_from_signature,
@@ -17,12 +18,17 @@ from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 _DECOMPILER_TYPE_PATTERN = re.compile(
     r"\b(?:undefined\d*|ulong64|ulonglong|longlong|code|byte|word|dword|qword)\b"
 )
+_INLINE_FUNCTION_START = re.compile(
+    r"(?m)^\s*(?:[A-Za-z_][\w\s\*]*?\s+)?(?P<name>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{"
+)
 _COMPILE_FAILURE_GATE = 0.4
 _BEHAVIOR_FAILURE_GATE = 0.75
 _COMPILE_FAILURE_PENALTY = 0.5
 _BEHAVIOR_FAILURE_PENALTY = 0.25
 _EXTRACTABLE_JSON_REWARD = 0.75
 _MIN_COMPLETION_TOKEN_COUNT = 5
+_MAX_COMPLETION_RATIO = 1.75
+_MAX_FUNCTION_COUNT = 1
 
 
 def _clamp01(value: float) -> float:
@@ -38,6 +44,13 @@ def _completion_ratio(candidate_code: str, raw_code: str) -> float:
     if raw_tokens == 0:
         return 1.0 if _token_count(candidate_code) > 0 else 0.0
     return min(1.0, _token_count(candidate_code) / raw_tokens)
+
+
+def _uncapped_completion_ratio(candidate_code: str, raw_code: str) -> float:
+    raw_tokens = _token_count(raw_code)
+    if raw_tokens == 0:
+        return 1.0 if _token_count(candidate_code) > 0 else 0.0
+    return _token_count(candidate_code) / raw_tokens
 
 
 def _is_substantially_complete(
@@ -57,6 +70,47 @@ def _is_substantially_complete(
     return ratio, completeness
 
 
+def _function_definition_count(candidate_code: str) -> int:
+    starts = iter_function_starts(candidate_code)
+    if starts:
+        return len(starts)
+    inline_names = [
+        match.group("name")
+        for match in _INLINE_FUNCTION_START.finditer(candidate_code)
+        if match.group("name") not in {"if", "for", "while", "switch"}
+    ]
+    if inline_names:
+        return len(inline_names)
+    return 1 if extract_function_signature(candidate_code) is not None else 0
+
+
+def overshoot_penalty(
+    candidate_code: str,
+    raw_code: str,
+    *,
+    max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+) -> float:
+    if max_completion_ratio <= 0:
+        return 0.0
+    ratio = _uncapped_completion_ratio(candidate_code, raw_code)
+    if ratio <= max_completion_ratio:
+        return 0.0
+    return _clamp01((ratio - max_completion_ratio) / max_completion_ratio)
+
+
+def multi_function_penalty(
+    candidate_code: str,
+    *,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
+) -> float:
+    if max_function_count < 1:
+        return 0.0
+    function_count = _function_definition_count(candidate_code)
+    if function_count <= max_function_count:
+        return 0.0
+    return _clamp01((function_count - max_function_count) / max_function_count)
+
+
 def _task_style_scales(task_type: str | None) -> dict[str, float]:
     if task_type == "cleanup":
         return {"cleanup": 1.0, "naming": 0.0, "readability": 0.5}
@@ -73,6 +127,9 @@ def empty_reward_breakdown(
     completion_ratio: float = 0.0,
     completeness: float = 0.0,
     behavior_from_execution: float = 0.0,
+    overshoot_penalty_value: float = 0.0,
+    multi_function_penalty_value: float = 0.0,
+    function_count: float = 0.0,
 ) -> dict[str, float]:
     return {
         "json_valid": json_valid,
@@ -91,6 +148,9 @@ def empty_reward_breakdown(
         "completion_ratio": completion_ratio,
         "completeness": completeness,
         "behavior_from_execution": behavior_from_execution,
+        "overshoot_penalty": overshoot_penalty_value,
+        "multi_function_penalty": multi_function_penalty_value,
+        "function_count": function_count,
         "total": 0.0,
     }
 
@@ -231,6 +291,8 @@ def reward_breakdown(
     weights: dict[str, float],
     task_type: str = "full_clarify",
     min_completion_ratio: float = 0.3,
+    max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> dict[str, float]:
     if not json_valid or not output.summary.strip() or not output.cleaned_c.strip():
         return empty_reward_breakdown(
@@ -253,6 +315,16 @@ def reward_breakdown(
             completeness=0.0,
             behavior_from_execution=1.0 if behavior_from_execution else 0.0,
         )
+    overshoot_value = overshoot_penalty(
+        output.cleaned_c,
+        raw_code,
+        max_completion_ratio=max_completion_ratio,
+    )
+    multi_function_value = multi_function_penalty(
+        output.cleaned_c,
+        max_function_count=max_function_count,
+    )
+    function_count = float(_function_definition_count(output.cleaned_c))
     cleanup_value = cleanup_reward(output, raw_code)
     naming_value = naming_reward(output, target_renamings)
     compile_value = compile_reward(compile_success)
@@ -285,6 +357,8 @@ def reward_breakdown(
     penalty_total = (
         weights.get("hallucination_penalty", 1.0) * hallucination_value
         + weights.get("decompiler_type_penalty", 0.0) * decompiler_type_value
+        + weights.get("overshoot_penalty", 0.0) * overshoot_value
+        + weights.get("multi_function_penalty", 0.0) * multi_function_value
     )
     failure_penalty = 0.0
     if not compile_success:
@@ -309,6 +383,9 @@ def reward_breakdown(
         "completion_ratio": completion_ratio,
         "completeness": completeness,
         "behavior_from_execution": 1.0 if behavior_from_execution else 0.0,
+        "overshoot_penalty": overshoot_value,
+        "multi_function_penalty": multi_function_value,
+        "function_count": function_count,
         "total": total,
     }
 
@@ -332,6 +409,8 @@ def weighted_reward(
     weights: dict[str, float],
     task_type: str = "full_clarify",
     min_completion_ratio: float = 0.3,
+    max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> float:
     return reward_breakdown(
         output=output,
@@ -351,4 +430,6 @@ def weighted_reward(
         weights=weights,
         task_type=task_type,
         min_completion_ratio=min_completion_ratio,
+        max_completion_ratio=max_completion_ratio,
+        max_function_count=max_function_count,
     )["total"]

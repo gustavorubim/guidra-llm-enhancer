@@ -33,7 +33,9 @@ from decomp_clarifier.training.grpo.rewards import (
     decompiler_type_penalty,
     format_reward,
     hallucination_penalty,
+    multi_function_penalty,
     naming_reward,
+    overshoot_penalty,
     readability_reward,
     safety_gate_factor,
     signature_reward,
@@ -385,6 +387,23 @@ def test_training_utilities_and_rewards(
         cleaned_c="int helper(void) { foo(); bar(); baz(); qux(); return 0; }",
     )
     assert hallucination_penalty(hallucinating_output, ["puts"], []) == 1.0
+    assert overshoot_penalty("int helper(void) { return 0; }", "int helper(void) { return 0; }") == 0.0
+    assert (
+        overshoot_penalty(
+            "int helper(void) { int total = 0; total += 1; total += 2; total += 3; return total; }",
+            "int helper(void) { return 0; }",
+            max_completion_ratio=1.5,
+        )
+        > 0.0
+    )
+    assert multi_function_penalty("int helper(void) { return 0; }") == 0.0
+    assert (
+        multi_function_penalty(
+            "int helper(void) { return 0; }\nint other(void) { return 1; }",
+            max_function_count=1,
+        )
+        == pytest.approx(1.0)
+    )
     assert signature_reward(
         decompiler_output, sample.target_clean_code, sample.source_function_name
     ) < 1.0
@@ -641,6 +660,145 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
     )
     assert compile_failure_capped_reward > 0.0
     assert compile_failure_capped_reward < compile_success_reward
+
+    guarded_multi_function_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={"local_10": "result"},
+            cleaned_c="int helper(void) { return 0; }\nint other(void) { return 1; }",
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ undefined8 local_10; return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={"local_10": "result"},
+        compile_success=True,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 1.0,
+            "behavior": 1.0,
+            "readability": 0.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+            "overshoot_penalty": 0.0,
+            "multi_function_penalty": 3.0,
+        },
+        max_function_count=1,
+    )
+    single_function_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={"local_10": "result"},
+            cleaned_c="int helper(void) { return 0; }",
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ undefined8 local_10; return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={"local_10": "result"},
+        compile_success=True,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 1.0,
+            "behavior": 1.0,
+            "readability": 0.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+            "overshoot_penalty": 0.0,
+            "multi_function_penalty": 3.0,
+        },
+        max_function_count=1,
+    )
+    assert guarded_multi_function_reward < single_function_reward
+
+    guarded_overshoot_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={},
+            cleaned_c=(
+                "int helper(void) { int total = 0; total += 1; total += 2; total += 3; "
+                "total += 4; total += 5; return total; }"
+            ),
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={},
+        compile_success=True,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 1.0,
+            "behavior": 1.0,
+            "readability": 0.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+            "overshoot_penalty": 2.0,
+            "multi_function_penalty": 0.0,
+        },
+        max_completion_ratio=1.25,
+    )
+    bounded_reward = weighted_reward(
+        output=ClarifiedFunctionOutput(
+            summary="ok",
+            confidence=1.0,
+            renamings={},
+            cleaned_c="int helper(void) { return 0; }",
+        ),
+        json_valid=True,
+        raw_code="int helper(void){ return 0; }",
+        target_clean_code="int helper(void) { return 0; }",
+        source_function_name="helper",
+        target_renamings={},
+        compile_success=True,
+        behavior_success=True,
+        behavior_score=1.0,
+        behavior_improvement=True,
+        allowed_imports=[],
+        allowed_callees=[],
+        weights={
+            "format": 1.0,
+            "cleanup": 0.0,
+            "naming": 0.0,
+            "compile": 1.0,
+            "behavior": 1.0,
+            "readability": 0.0,
+            "signature": 1.0,
+            "hallucination_penalty": 0.0,
+            "decompiler_type_penalty": 0.0,
+            "overshoot_penalty": 2.0,
+            "multi_function_penalty": 0.0,
+        },
+        max_completion_ratio=1.25,
+    )
+    assert guarded_overshoot_reward < bounded_reward
 
     assert compute_completion_reward(
         completion=(
