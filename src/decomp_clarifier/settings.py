@@ -139,6 +139,7 @@ class TrainingRunConfig(BaseModel):
     execution_pass_rate_threshold: float | None = None
     min_completion_ratio: float | None = None
     max_completion_ratio: float | None = None
+    max_invalid_completion_ratio: float | None = None
     max_function_count: int | None = None
 
 
@@ -298,6 +299,16 @@ def load_dataset_config(
 def load_training_config(
     root: Path, name: str, cli_overrides: dict[str, Any] | None = None
 ) -> TrainingConfig:
+    candidate = Path(name)
+    if candidate.is_absolute() or candidate.suffix in {".yaml", ".yml"} or any(
+        separator in name for separator in ("/", "\\")
+    ):
+        path = candidate if candidate.is_absolute() else root / candidate
+        return ConfigLoader(root).load(
+            TrainingConfig,
+            path,
+            cli_overrides=cli_overrides,
+        )
     return ConfigLoader(root).load(
         TrainingConfig,
         root / "configs" / "training" / f"{name}.yaml",

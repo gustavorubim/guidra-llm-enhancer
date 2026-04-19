@@ -13,7 +13,11 @@ from decomp_clarifier.evaluation.compile_eval import compile_candidate
 from decomp_clarifier.inference.formatter import normalize_output_with_schema_status
 from decomp_clarifier.settings import TrainingConfig
 from decomp_clarifier.training.grpo.data import prompt_from_record, reward_fields_from_record
-from decomp_clarifier.training.grpo.rewards import empty_reward_breakdown, reward_breakdown
+from decomp_clarifier.training.grpo.rewards import (
+    empty_reward_breakdown,
+    invalid_json_penalty,
+    reward_breakdown,
+)
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.telemetry import (
     TrainingTelemetry,
@@ -34,6 +38,7 @@ _BEHAVIOR_SIMILARITY_THRESHOLD = 0.35
 _EXECUTION_PASS_RATE_THRESHOLD = 1.0
 _MIN_COMPLETION_RATIO = 0.3
 _MAX_COMPLETION_RATIO = 1.75
+_MAX_INVALID_COMPLETION_RATIO = 0.9
 _MAX_FUNCTION_COUNT = 1
 
 
@@ -67,6 +72,7 @@ def compute_completion_reward(
     execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
     min_completion_ratio: float = _MIN_COMPLETION_RATIO,
     max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_invalid_completion_ratio: float = _MAX_INVALID_COMPLETION_RATIO,
     max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> float:
     return compute_completion_reward_details(
@@ -86,6 +92,7 @@ def compute_completion_reward(
         execution_pass_rate_threshold=execution_pass_rate_threshold,
         min_completion_ratio=min_completion_ratio,
         max_completion_ratio=max_completion_ratio,
+        max_invalid_completion_ratio=max_invalid_completion_ratio,
         max_function_count=max_function_count,
     )["total"]
 
@@ -107,13 +114,25 @@ def compute_completion_reward_details(
     execution_pass_rate_threshold: float = _EXECUTION_PASS_RATE_THRESHOLD,
     min_completion_ratio: float = _MIN_COMPLETION_RATIO,
     max_completion_ratio: float = _MAX_COMPLETION_RATIO,
+    max_invalid_completion_ratio: float = _MAX_INVALID_COMPLETION_RATIO,
     max_function_count: int = _MAX_FUNCTION_COUNT,
 ) -> dict[str, float]:
     try:
         output, schema_status = normalize_output_with_schema_status(completion)
         json_valid = schema_status != "invalid"
         if not json_valid:
-            return empty_reward_breakdown()
+            total_penalty, invalid_details = invalid_json_penalty(
+                completion,
+                raw_code,
+                max_invalid_completion_ratio=max_invalid_completion_ratio,
+                weights=weights,
+            )
+            return empty_reward_breakdown(
+                invalid_length_penalty_value=invalid_details["invalid_length_penalty"],
+                truncation_penalty_value=invalid_details["truncation_penalty"],
+                raw_completion_ratio=invalid_details["raw_completion_ratio"],
+                total=-total_penalty,
+            )
         renamings: dict[str, str] = json.loads(target_renamings_json)
         imports: list[str] = json.loads(allowed_imports_json)
         callees: list[str] = json.loads(allowed_callees_json)
@@ -232,6 +251,11 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         if config.training.max_completion_ratio is not None
         else _MAX_COMPLETION_RATIO
     )
+    max_invalid_completion_ratio = (
+        config.training.max_invalid_completion_ratio
+        if config.training.max_invalid_completion_ratio is not None
+        else _MAX_INVALID_COMPLETION_RATIO
+    )
     max_function_count = (
         config.training.max_function_count
         if config.training.max_function_count is not None
@@ -307,6 +331,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 execution_pass_rate_threshold=execution_pass_rate_threshold,
                 min_completion_ratio=min_completion_ratio,
                 max_completion_ratio=max_completion_ratio,
+                max_invalid_completion_ratio=max_invalid_completion_ratio,
                 max_function_count=max_function_count,
             )
             for index, completion in enumerate(completions)

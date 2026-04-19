@@ -1,0 +1,42 @@
+model:
+  base_model_id:
+  source_training_profile: sft_qwen35_2b
+  loader_variant: unsloth
+training:
+  max_seq_length: 1536
+  load_in_4bit: true
+  precision: bf16
+  lora_rank: 32
+  batch_size: 1
+  grad_accum_steps: 1
+  epochs: 1
+  max_steps: 100
+  max_prompt_length: 896
+  max_completion_length: 384
+  generations_per_prompt: 4
+  learning_rate: 1.5e-6
+  adam_beta1: 0.9
+  adam_beta2: 0.99
+  weight_decay: 0.1
+  warmup_ratio: 0.1
+  lr_scheduler_type: cosine
+  optim: adamw_8bit
+  max_grad_norm: 0.1
+  save_steps: 25
+  behavior_similarity_threshold: 0.35
+  execution_pass_rate_threshold: 1.0
+  min_completion_ratio: 0.2
+  max_invalid_completion_ratio: 0.9
+  reward_weights:
+    format: 1.0
+    cleanup: 1.25
+    naming: 0.0
+    compile: 3.0
+    behavior: 3.0
+    readability: 0.5
+    signature: 1.0
+    hallucination_penalty: 1.0
+    decompiler_type_penalty: 0.75
+    invalid_json_penalty: 0.25
+    invalid_length_penalty: 1.0
+    truncation_penalty: 2.0

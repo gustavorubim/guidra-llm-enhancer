@@ -29,6 +29,7 @@ _EXTRACTABLE_JSON_REWARD = 0.75
 _MIN_COMPLETION_TOKEN_COUNT = 5
 _MAX_COMPLETION_RATIO = 1.75
 _MAX_FUNCTION_COUNT = 1
+_MAX_INVALID_COMPLETION_RATIO = 0.9
 
 
 def _clamp01(value: float) -> float:
@@ -111,6 +112,78 @@ def multi_function_penalty(
     return _clamp01((function_count - max_function_count) / max_function_count)
 
 
+def invalid_completion_length_penalty(
+    raw_completion: str,
+    raw_code: str,
+    *,
+    max_invalid_completion_ratio: float = _MAX_INVALID_COMPLETION_RATIO,
+) -> float:
+    if max_invalid_completion_ratio <= 0:
+        return 0.0
+    ratio = _uncapped_completion_ratio(raw_completion, raw_code)
+    if ratio <= max_invalid_completion_ratio:
+        return 0.0
+    return _clamp01((ratio - max_invalid_completion_ratio) / max_invalid_completion_ratio)
+
+
+def _has_unbalanced_quotes(text: str) -> bool:
+    in_string = False
+    escaped = False
+    for character in text:
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
+        if character == '"':
+            in_string = not in_string
+    return in_string
+
+
+def truncation_penalty(raw_completion: str) -> float:
+    stripped = raw_completion.strip()
+    if not stripped:
+        return 0.0
+    score = 0.0
+    if stripped.startswith("{"):
+        score += 0.25
+    if stripped.count("{") > stripped.count("}"):
+        score += 0.35
+    if _has_unbalanced_quotes(stripped):
+        score += 0.25
+    if stripped.endswith((",", ":", "\\", "{", "[")):
+        score += 0.25
+    if stripped.endswith('"') and not stripped.endswith('"}'):
+        score += 0.15
+    return _clamp01(score)
+
+
+def invalid_json_penalty(
+    raw_completion: str,
+    raw_code: str,
+    *,
+    max_invalid_completion_ratio: float = _MAX_INVALID_COMPLETION_RATIO,
+    weights: dict[str, float],
+) -> tuple[float, dict[str, float]]:
+    length_penalty = invalid_completion_length_penalty(
+        raw_completion,
+        raw_code,
+        max_invalid_completion_ratio=max_invalid_completion_ratio,
+    )
+    truncation_value = truncation_penalty(raw_completion)
+    total_penalty = (
+        weights.get("invalid_json_penalty", 0.0)
+        + weights.get("invalid_length_penalty", 0.0) * length_penalty
+        + weights.get("truncation_penalty", 0.0) * truncation_value
+    )
+    return total_penalty, {
+        "invalid_length_penalty": length_penalty,
+        "truncation_penalty": truncation_value,
+        "raw_completion_ratio": _uncapped_completion_ratio(raw_completion, raw_code),
+    }
+
+
 def _task_style_scales(task_type: str | None) -> dict[str, float]:
     if task_type == "cleanup":
         return {"cleanup": 1.0, "naming": 0.0, "readability": 0.5}
@@ -130,6 +203,10 @@ def empty_reward_breakdown(
     overshoot_penalty_value: float = 0.0,
     multi_function_penalty_value: float = 0.0,
     function_count: float = 0.0,
+    invalid_length_penalty_value: float = 0.0,
+    truncation_penalty_value: float = 0.0,
+    raw_completion_ratio: float = 0.0,
+    total: float = 0.0,
 ) -> dict[str, float]:
     return {
         "json_valid": json_valid,
@@ -151,7 +228,10 @@ def empty_reward_breakdown(
         "overshoot_penalty": overshoot_penalty_value,
         "multi_function_penalty": multi_function_penalty_value,
         "function_count": function_count,
-        "total": 0.0,
+        "invalid_length_penalty": invalid_length_penalty_value,
+        "truncation_penalty": truncation_penalty_value,
+        "raw_completion_ratio": raw_completion_ratio,
+        "total": total,
     }
 
 
@@ -386,6 +466,9 @@ def reward_breakdown(
         "overshoot_penalty": overshoot_value,
         "multi_function_penalty": multi_function_value,
         "function_count": function_count,
+        "invalid_length_penalty": 0.0,
+        "truncation_penalty": 0.0,
+        "raw_completion_ratio": 0.0,
         "total": total,
     }
 

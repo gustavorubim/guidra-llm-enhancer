@@ -33,12 +33,14 @@ from decomp_clarifier.training.grpo.rewards import (
     decompiler_type_penalty,
     format_reward,
     hallucination_penalty,
+    invalid_completion_length_penalty,
     multi_function_penalty,
     naming_reward,
     overshoot_penalty,
     readability_reward,
     safety_gate_factor,
     signature_reward,
+    truncation_penalty,
     weighted_reward,
 )
 from decomp_clarifier.training.grpo.train import compute_completion_reward
@@ -403,6 +405,20 @@ def test_training_utilities_and_rewards(
             max_function_count=1,
         )
         == pytest.approx(1.0)
+    )
+    assert (
+        invalid_completion_length_penalty(
+            '{"cleaned_c":"int main(void) { return 0; int x = 1; int y = 2; }"',
+            "int main(void) { return 0; }",
+            max_invalid_completion_ratio=0.9,
+        )
+        > 0.0
+    )
+    assert (
+        truncation_penalty(
+            '{"cleaned_c":"int main(void) { return 0; }", "confidence": 1.0, "summary": "'
+        )
+        > 0.0
     )
     assert signature_reward(
         decompiler_output, sample.target_clean_code, sample.source_function_name
@@ -817,6 +833,31 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
         tests_ref="",
         weights={},
     ) == 0.0
+    assert (
+        compute_completion_reward(
+            completion=(
+                '{"cleaned_c":"int main(void) { return 0; int x = 1; int y = 2; }", '
+                '"confidence": 1.0, "summary": "'
+            ),
+            task_type="full_clarify",
+            source_function_name="main",
+            raw_code="int main(void) { return 0; }",
+            compile_reference_source="",
+            target_clean_code="int main(void) { return 0; }",
+            target_renamings_json="{}",
+            allowed_imports_json="[]",
+            allowed_callees_json="[]",
+            compiler_executable=None,
+            tests_ref="",
+            weights={
+                "invalid_json_penalty": 0.25,
+                "invalid_length_penalty": 1.0,
+                "truncation_penalty": 2.0,
+            },
+            max_invalid_completion_ratio=0.9,
+        )
+        < 0.0
+    )
 
     assert not normalize_optional_flag((False, None))
     assert normalize_optional_flag((True, "1.0"))
