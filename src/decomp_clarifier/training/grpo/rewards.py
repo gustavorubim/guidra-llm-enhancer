@@ -21,6 +21,9 @@ _DECOMPILER_TYPE_PATTERN = re.compile(
 _INLINE_FUNCTION_START = re.compile(
     r"(?m)^\s*(?:[A-Za-z_][\w\s\*]*?\s+)?(?P<name>[A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{"
 )
+_RAW_FUNCTION_START = re.compile(
+    r"(?P<name>[A-Za-z_]\w*)\s*\([^;{}]{0,160}\)\s*\{"
+)
 _COMPILE_FAILURE_GATE = 0.4
 _BEHAVIOR_FAILURE_GATE = 0.75
 _COMPILE_FAILURE_PENALTY = 0.5
@@ -126,6 +129,33 @@ def invalid_completion_length_penalty(
     return _clamp01((ratio - max_invalid_completion_ratio) / max_invalid_completion_ratio)
 
 
+def invalid_scope_penalty(
+    raw_completion: str,
+    source_function_name: str,
+    *,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
+) -> float:
+    target_name = source_function_name.strip()
+    matched_names = [
+        match.group("name")
+        for match in _RAW_FUNCTION_START.finditer(raw_completion)
+        if match.group("name") not in {"if", "for", "while", "switch"}
+    ]
+    if not matched_names:
+        return 0.0
+    unique_names = list(dict.fromkeys(matched_names))
+    if target_name:
+        non_target_names = [name for name in unique_names if name != target_name]
+        if not non_target_names:
+            return 0.0
+        if target_name != "main" and "main" in non_target_names:
+            return 1.0
+        return _clamp01(len(non_target_names) / max(1, max_function_count))
+    if len(unique_names) <= max_function_count:
+        return 0.0
+    return _clamp01((len(unique_names) - max_function_count) / max(1, max_function_count))
+
+
 def _has_unbalanced_quotes(text: str) -> bool:
     in_string = False
     escaped = False
@@ -162,8 +192,10 @@ def truncation_penalty(raw_completion: str) -> float:
 def invalid_json_penalty(
     raw_completion: str,
     raw_code: str,
+    source_function_name: str,
     *,
     max_invalid_completion_ratio: float = _MAX_INVALID_COMPLETION_RATIO,
+    max_function_count: int = _MAX_FUNCTION_COUNT,
     weights: dict[str, float],
 ) -> tuple[float, dict[str, float]]:
     length_penalty = invalid_completion_length_penalty(
@@ -172,14 +204,21 @@ def invalid_json_penalty(
         max_invalid_completion_ratio=max_invalid_completion_ratio,
     )
     truncation_value = truncation_penalty(raw_completion)
+    scope_penalty = invalid_scope_penalty(
+        raw_completion,
+        source_function_name,
+        max_function_count=max_function_count,
+    )
     total_penalty = (
         weights.get("invalid_json_penalty", 0.0)
         + weights.get("invalid_length_penalty", 0.0) * length_penalty
         + weights.get("truncation_penalty", 0.0) * truncation_value
+        + weights.get("invalid_scope_penalty", 0.0) * scope_penalty
     )
     return total_penalty, {
         "invalid_length_penalty": length_penalty,
         "truncation_penalty": truncation_value,
+        "invalid_scope_penalty": scope_penalty,
         "raw_completion_ratio": _uncapped_completion_ratio(raw_completion, raw_code),
     }
 
@@ -205,7 +244,11 @@ def empty_reward_breakdown(
     function_count: float = 0.0,
     invalid_length_penalty_value: float = 0.0,
     truncation_penalty_value: float = 0.0,
+    invalid_scope_penalty_value: float = 0.0,
     raw_completion_ratio: float = 0.0,
+    core_total: float = 0.0,
+    style_total: float = 0.0,
+    constraint_total: float = 0.0,
     total: float = 0.0,
 ) -> dict[str, float]:
     return {
@@ -230,7 +273,11 @@ def empty_reward_breakdown(
         "function_count": function_count,
         "invalid_length_penalty": invalid_length_penalty_value,
         "truncation_penalty": truncation_penalty_value,
+        "invalid_scope_penalty": invalid_scope_penalty_value,
         "raw_completion_ratio": raw_completion_ratio,
+        "core_total": core_total,
+        "style_total": style_total,
+        "constraint_total": constraint_total,
         "total": total,
     }
 
@@ -445,7 +492,9 @@ def reward_breakdown(
         failure_penalty += weights.get("compile", 1.0) * _COMPILE_FAILURE_PENALTY
     if compile_success and not behavior_success:
         failure_penalty += weights.get("behavior", 1.0) * _BEHAVIOR_FAILURE_PENALTY
-    total = core_total + style_total - penalty_total - failure_penalty
+    core_total -= failure_penalty
+    constraint_total = -penalty_total
+    total = core_total + style_total + constraint_total
     return {
         "json_valid": 1.0,
         "format": format_value,
@@ -468,7 +517,11 @@ def reward_breakdown(
         "function_count": function_count,
         "invalid_length_penalty": 0.0,
         "truncation_penalty": 0.0,
+        "invalid_scope_penalty": 0.0,
         "raw_completion_ratio": 0.0,
+        "core_total": core_total,
+        "style_total": style_total,
+        "constraint_total": constraint_total,
         "total": total,
     }
 

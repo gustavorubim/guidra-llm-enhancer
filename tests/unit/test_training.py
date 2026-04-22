@@ -19,7 +19,10 @@ with suppress(ImportError):
     import torch as _torch_preload  # noqa: F401
 
 from decomp_clarifier.adapters.compiler_clang import resolve_clang_executable
-from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, evaluate_execution_behavior
+from decomp_clarifier.evaluation.behavior_eval import (
+    behavior_similarity,
+    evaluate_execution_behavior,
+)
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 from decomp_clarifier.training.grpo.data import (
     load_rl_records,
@@ -34,6 +37,7 @@ from decomp_clarifier.training.grpo.rewards import (
     format_reward,
     hallucination_penalty,
     invalid_completion_length_penalty,
+    invalid_scope_penalty,
     multi_function_penalty,
     naming_reward,
     overshoot_penalty,
@@ -43,7 +47,10 @@ from decomp_clarifier.training.grpo.rewards import (
     truncation_penalty,
     weighted_reward,
 )
-from decomp_clarifier.training.grpo.train import compute_completion_reward
+from decomp_clarifier.training.grpo.train import (
+    _resolve_multi_reward_weights,
+    compute_completion_reward,
+)
 from decomp_clarifier.training.grpo.verifier import verify_output
 from decomp_clarifier.training.sft.callbacks import write_training_summary
 from decomp_clarifier.training.sft.data import (
@@ -88,6 +95,11 @@ def _version_with_fallback(name: str):
     if name in validated:
         return validated[name]
     return _ORIGINAL_METADATA_VERSION(name)
+
+
+def test_resolve_multi_reward_weights_rejects_wrong_length() -> None:
+    with pytest.raises(ValueError, match="must match the number of reward functions"):
+        _resolve_multi_reward_weights([1.0, 2.0])
 
 
 def test_model_source_access_sets_offline_mode_for_cached_remote_model(monkeypatch) -> None:
@@ -419,6 +431,20 @@ def test_training_utilities_and_rewards(
             '{"cleaned_c":"int main(void) { return 0; }", "confidence": 1.0, "summary": "'
         )
         > 0.0
+    )
+    assert (
+        invalid_scope_penalty(
+            '{"cleaned_c":"int main(void) { return 0; }", "summary": "',
+            "count_flags",
+        )
+        == pytest.approx(1.0)
+    )
+    assert (
+        invalid_scope_penalty(
+            '{"cleaned_c":"int count_flags(void) { return 0; }", "summary": "',
+            "count_flags",
+        )
+        == pytest.approx(0.0)
     )
     assert signature_reward(
         decompiler_output, sample.target_clean_code, sample.source_function_name
@@ -853,6 +879,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
                 "invalid_json_penalty": 0.25,
                 "invalid_length_penalty": 1.0,
                 "truncation_penalty": 2.0,
+                "invalid_scope_penalty": 2.0,
             },
             max_invalid_completion_ratio=0.9,
         )
@@ -1100,17 +1127,20 @@ def test_run_training_wrappers_with_fake_modules(
         def save_model(self, path):
             Path(path).mkdir(parents=True, exist_ok=True)
 
+    captured_reward_func_counts: list[int] = []
+
     class FakeGRPOTrainer(FakeSFTTrainer):
         def __init__(self, **kwargs):
             assert "processing_class" in kwargs
             assert "tokenizer" not in kwargs
             captured_grpo_args.append(kwargs["args"])
+            captured_reward_func_counts.append(len(kwargs.get("reward_funcs", [])))
             super().__init__(**kwargs)
 
         def train(self):
             reward_funcs = self.kwargs.get("reward_funcs", [])
-            if reward_funcs:
-                reward_funcs[0](
+            for reward_func in reward_funcs:
+                reward_func(
                     ["test completion"],
                     source_function_name=["helper"],
                     raw_code=["int uVar3(void){ int local_10; return local_10; }"],
@@ -1169,6 +1199,11 @@ def test_run_training_wrappers_with_fake_modules(
                 "max_prompt_length": 128,
                 "max_completion_length": 64,
                 "generations_per_prompt": 2,
+                "loss_type": "dr_grpo",
+                "multi_reward_weights": [1.0, 2.0, 0.5],
+                "scale_rewards": "group",
+                "beta": 0.0,
+                "mask_truncated_completions": True,
                 "learning_rate": 7e-6,
                 "adam_beta1": 0.85,
                 "adam_beta2": 0.97,
@@ -1177,6 +1212,11 @@ def test_run_training_wrappers_with_fake_modules(
                 "lr_scheduler_type": "linear",
                 "optim": "adamw_8bit",
                 "max_grad_norm": 0.2,
+                "rollout_temperature": 0.8,
+                "rollout_top_p": 0.9,
+                "rollout_top_k": 50,
+                "rollout_min_p": 0.05,
+                "rollout_repetition_penalty": 1.02,
                 "save_steps": 17,
                 "behavior_similarity_threshold": 0.0,
             },
@@ -1187,6 +1227,7 @@ def test_run_training_wrappers_with_fake_modules(
     assert sft_manifest.exists()
     assert grpo_manifest.exists()
     assert len(captured_grpo_args) == 1
+    assert captured_reward_func_counts == [3]
     assert captured_grpo_args[0].learning_rate == 7e-6
     assert captured_grpo_args[0].adam_beta1 == 0.85
     assert captured_grpo_args[0].adam_beta2 == 0.97
@@ -1195,8 +1236,16 @@ def test_run_training_wrappers_with_fake_modules(
     assert captured_grpo_args[0].lr_scheduler_type == "linear"
     assert captured_grpo_args[0].optim == "adamw_8bit"
     assert captured_grpo_args[0].max_grad_norm == 0.2
+    assert captured_grpo_args[0].temperature == 0.8
+    assert captured_grpo_args[0].top_p == 0.9
+    assert captured_grpo_args[0].top_k == 50
+    assert captured_grpo_args[0].min_p == 0.05
+    assert captured_grpo_args[0].repetition_penalty == 1.02
     assert captured_grpo_args[0].save_steps == 17
+    assert captured_grpo_args[0].loss_type == "dr_grpo"
+    assert captured_grpo_args[0].reward_weights == [1.0, 2.0, 0.5]
     assert captured_grpo_args[0].scale_rewards == "group"
+    assert captured_grpo_args[0].beta == 0.0
     assert captured_grpo_args[0].mask_truncated_completions is True
 
     sft_payload = json.loads(sft_manifest.read_text(encoding="utf-8"))

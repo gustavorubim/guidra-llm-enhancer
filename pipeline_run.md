@@ -757,5 +757,48 @@ python -m decomp_clarifier.cli train-grpo --training-profile grpo_qwen35_2b --ba
 
 python -m decomp_clarifier.cli eval-grpo-checkpoint --checkpoint-dir <path-to-qwen-grpo-model-dir> --training-profile grpo_qwen35_2b --app-profile default --split val --inspection-sample-count 8 --max-new-tokens 384 --temperature 0.0
 python .\scripts\build_model_matrix_summary.py --app-profile default --eval-manifest "sft_qwen35_2b=<path-to-sft-qwen35-2b-checkpoint_eval_manifest.json>" --eval-manifest "grpo_qwen35_2b=<path-to-grpo-qwen35-2b-checkpoint_eval_manifest.json>"
+python .\scripts\build_sample_comparison_report.py --app-profile default --split val --sample-count 20
 
 ```
+
+`build_sample_comparison_report.py` writes a random side-by-side report under `artifacts/runs/sample-comparison-report-*/` showing:
+
+- original source
+- decompiled output
+- `prompt_only_cleanup` as the original prompt baseline
+- `base_qwen` or `base_qwen_openrouter` as the Qwen prompt baseline
+- SFT output
+- GRPO output
+
+Override artifact paths with `--baseline-predictions`, `--sft-predictions`, and `--grpo-predictions` when you want to pin the report to specific runs.
+
+## Qwen GRPO Campaign
+
+Use the campaign runner when you want a bounded Qwen-only autoresearch loop that:
+
+- writes candidate GRPO profiles under `research/campaigns/<tag>/profiles/`
+- trains each candidate from the same SFT base checkpoint
+- runs a scout eval on `50` val samples
+- runs a full val confirm only when the scout gate passes
+- records the promoted champion in `research/campaigns/<tag>/champion.json`
+
+Example:
+
+```powershell
+python -m decomp_clarifier.research.grpo_campaign `
+  --seed-profile configs/training/grpo_qwen35_2b_guarded_pilot.yaml `
+  --base-model-id artifacts/runs/train-sft-20260418-161635/model `
+  --max-iterations 5 `
+  --tag qwen-grpo-campaign-YYYYMMDD-01
+```
+
+Artifacts:
+
+- campaign log: `artifacts/logs/<tag>.log`
+- champion summary: `research/campaigns/<tag>/champion.json`
+- experiment history: `research/campaigns/<tag>/experiment_log.jsonl`
+- generated candidate profiles: `research/campaigns/<tag>/profiles/`
+
+Note:
+
+- `train-sft` and `train-grpo` now accept a direct YAML file path in `--training-profile`, not just a profile name under `configs/training/`.
