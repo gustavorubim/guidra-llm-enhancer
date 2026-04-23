@@ -178,9 +178,9 @@ def test_cli_workflow_smoke(
     monkeypatch.setattr(
         cli_module,
         "write_jsonl_records",
-        lambda path, records: DatasetManifest(
+        lambda path, records, split_counts=None: DatasetManifest(
             record_count=len(records),
-            split_counts={},
+            split_counts=split_counts or {},
             task_counts={"full_clarify": 3, "cleanup": 3, "rename": 3},
             output_path=str(path),
         ),

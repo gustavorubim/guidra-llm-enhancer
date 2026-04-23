@@ -17,7 +17,7 @@ from decomp_clarifier.schemas.compiler import (
     TestExecutionResult as CompilerTestExecutionResult,
 )
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput, PredictionRecord
-from decomp_clarifier.settings import GenerationConfig
+from decomp_clarifier.settings import GenerationConfig, TrainingConfig
 
 
 def test_bootstrap_writes_app_config(tmp_path: Path, temp_app_config, monkeypatch) -> None:
@@ -322,4 +322,55 @@ def test_resolve_openrouter_model_id_prefers_explicit_override() -> None:
             base_model_openrouter_id=None,
         )
         is None
+    )
+
+
+def test_resolve_grpo_base_model_blocks_raw_override_for_sft_profile(temp_paths) -> None:
+    config = TrainingConfig.model_validate(
+        {
+            "model": {
+                "base_model_id": "Qwen/Qwen3.5-2B",
+                "source_training_profile": "sft_qwen35_2b",
+            }
+        }
+    )
+
+    with pytest.raises(typer.BadParameter, match="completed SFT checkpoint"):
+        cli_module._resolve_grpo_base_model(
+            temp_paths,
+            config,
+            training_profile="grpo_qwen35_2b_gdpo_300",
+        )
+
+    assert (
+        cli_module._resolve_grpo_base_model(
+            temp_paths,
+            config,
+            training_profile="grpo_qwen35_2b_gdpo_300",
+            allow_raw_base=True,
+        )
+        == "Qwen/Qwen3.5-2B"
+    )
+
+
+def test_resolve_grpo_base_model_accepts_sft_checkpoint_override(temp_paths) -> None:
+    checkpoint_dir = temp_paths.run_dir("train-sft-20260423-010000") / "model"
+    checkpoint_dir.mkdir(parents=True)
+    (checkpoint_dir / "sft_training_manifest.json").write_text("{}", encoding="utf-8")
+    config = TrainingConfig.model_validate(
+        {
+            "model": {
+                "base_model_id": str(checkpoint_dir),
+                "source_training_profile": "sft_qwen35_2b",
+            }
+        }
+    )
+
+    assert (
+        cli_module._resolve_grpo_base_model(
+            temp_paths,
+            config,
+            training_profile="grpo_qwen35_2b_gdpo_300",
+        )
+        == str(checkpoint_dir)
     )

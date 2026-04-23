@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
@@ -24,6 +24,8 @@ from decomp_clarifier.schemas.evaluation import ReportExample, SampleEvaluation
 from decomp_clarifier.schemas.model_io import PredictionRecord
 from decomp_clarifier.settings import TrainingConfig, load_training_config
 from decomp_clarifier.training.grpo.verifier import verify_output
+
+PromptFormatter = Callable[[FunctionDatasetSample], str]
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,55 @@ def _training_profile_for_manifest(manifest_path: Path) -> str | None:
     return None
 
 
+def _training_model_field_for_manifest(manifest_path: Path, field_name: str) -> str | None:
+    resolved_path = manifest_path.parent.parent / "resolved_config.yaml"
+    if not resolved_path.exists():
+        return None
+    payload = yaml.safe_load(resolved_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        return None
+    training_payload = payload.get("training")
+    if not isinstance(training_payload, dict):
+        return None
+    model_payload = training_payload.get("model")
+    if not isinstance(model_payload, dict):
+        return None
+    value = model_payload.get(field_name)
+    return value if isinstance(value, str) and value else None
+
+
+def _path_contains_manifest(path: Path, manifest_name: str) -> bool:
+    paths_to_check = [path, path / "model", *path.parents[:3]]
+    return any((candidate / manifest_name).exists() for candidate in paths_to_check)
+
+
+def _manifest_uses_expected_source_profile(
+    root: Path,
+    manifest_path: Path,
+    expected_source_profile: str,
+) -> bool:
+    source_profile = _training_model_field_for_manifest(
+        manifest_path,
+        "source_training_profile",
+    )
+    if source_profile == expected_source_profile:
+        return True
+    base_model_id = _training_model_field_for_manifest(manifest_path, "base_model_id")
+    if not base_model_id:
+        return False
+    base_path = Path(base_model_id)
+    resolved_base_path = base_path if base_path.is_absolute() else root / base_path
+    return _path_contains_manifest(resolved_base_path, "sft_training_manifest.json")
+
+
+def _expected_source_training_profile(root: Path, training_profile: str) -> str | None:
+    try:
+        config = load_training_config(root, training_profile)
+    except (FileNotFoundError, ValueError):
+        return None
+    return config.model.source_training_profile
+
+
 def _resolved_config_path_for_checkpoint(checkpoint_dir: Path) -> Path:
     if checkpoint_dir.name.startswith("checkpoint-"):
         return checkpoint_dir.parent.parent / "resolved_config.yaml"
@@ -79,6 +130,29 @@ def find_latest_completed_checkpoint(
             for manifest in manifests
             if _training_profile_for_manifest(manifest) == training_profile
         ]
+        expected_source_profile = (
+            _expected_source_training_profile(paths.root, training_profile)
+            if stage == "grpo"
+            else None
+        )
+        if expected_source_profile is not None:
+            matching = [
+                manifest
+                for manifest in matching
+                if _manifest_uses_expected_source_profile(
+                    paths.root,
+                    manifest,
+                    expected_source_profile,
+                )
+            ]
+            if matching:
+                return matching[-1].parent
+            raise FileNotFoundError(
+                "No completed "
+                f"train-{stage} checkpoint manifest found for training_profile="
+                f"{training_profile!r} with source_training_profile="
+                f"{expected_source_profile!r}."
+            )
         if matching:
             return matching[-1].parent
         unlabeled = [
@@ -133,6 +207,16 @@ def load_dataset_split(
         if sample_limit is not None and len(samples) >= sample_limit:
             break
     return samples
+
+
+def resolve_checkpoint_prompt_formatter(stage: str, prompt_profile: str) -> PromptFormatter:
+    if prompt_profile == "stage":
+        return format_rl_prompt if stage == "grpo" else format_prompt
+    if prompt_profile == "compact":
+        return format_rl_prompt
+    if prompt_profile == "full":
+        return format_prompt
+    raise ValueError("prompt_profile must be one of: stage, compact, full")
 
 
 def evaluate_prediction_records(
@@ -437,6 +521,7 @@ def run_checkpoint_evaluation(
     inspection_sample_count: int,
     max_new_tokens: int,
     temperature: float,
+    prompt_profile: str = "stage",
 ) -> CheckpointEvalArtifacts:
     checkpoint_dir = normalize_checkpoint_dir(checkpoint_dir)
     config = load_checkpoint_training_config(root, checkpoint_dir, training_profile)
@@ -455,12 +540,14 @@ def run_checkpoint_evaluation(
         )
     samples_by_id = {sample.sample_id: sample for sample in samples}
 
-    prompt_formatter = format_rl_prompt if stage == "grpo" else format_prompt
+    prompt_formatter = resolve_checkpoint_prompt_formatter(stage, prompt_profile)
     if logger is not None:
         logger.info(
-            "loading predictor stage=%s checkpoint=%s max_new_tokens=%s temperature=%s",
+            "loading predictor stage=%s checkpoint=%s prompt_profile=%s "
+            "max_new_tokens=%s temperature=%s",
             stage,
             checkpoint_dir,
+            prompt_profile,
             max_new_tokens,
             temperature,
         )
@@ -489,7 +576,8 @@ def run_checkpoint_evaluation(
         ):
             elapsed = max(time.perf_counter() - prediction_started_at, 1e-9)
             logger.info(
-                "checkpoint prediction progress stage=%s completed=%s/%s sample_id=%s elapsed=%.1fs rate=%.2f samples/s",
+                "checkpoint prediction progress stage=%s completed=%s/%s sample_id=%s "
+                "elapsed=%.1fs rate=%.2f samples/s",
                 stage,
                 index,
                 len(samples),
@@ -513,7 +601,11 @@ def run_checkpoint_evaluation(
         encoding="utf-8",
     )
     if logger is not None:
-        logger.info("wrote checkpoint predictions path=%s records=%s", predictions_path, len(records))
+        logger.info(
+            "wrote checkpoint predictions path=%s records=%s",
+            predictions_path,
+            len(records),
+        )
 
     evaluations = evaluate_prediction_records(
         samples_by_id,
@@ -527,7 +619,11 @@ def run_checkpoint_evaluation(
         encoding="utf-8",
     )
     if logger is not None:
-        logger.info("wrote checkpoint evaluations path=%s records=%s", evaluations_path, len(evaluations))
+        logger.info(
+            "wrote checkpoint evaluations path=%s records=%s",
+            evaluations_path,
+            len(evaluations),
+        )
 
     report = build_report(run_id, evaluations)
     baseline_metrics = load_baseline_reports(paths, samples_by_id)
@@ -604,6 +700,7 @@ def run_checkpoint_evaluation(
                 "split": split,
                 "sample_count": len(samples),
                 "training_profile": training_profile,
+                "prompt_profile": prompt_profile,
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
                 "metrics": report.metrics,

@@ -6,6 +6,7 @@ param(
     [int]$InspectionSampleCount = 8,
     [int]$MaxNewTokens = 384,
     [double]$Temperature = 0.0,
+    [string]$PromptProfile = "stage",
     [int]$SampleLimit = 0
 )
 
@@ -22,7 +23,8 @@ $args = @(
     "--split", $Split,
     "--inspection-sample-count", $InspectionSampleCount,
     "--max-new-tokens", $MaxNewTokens,
-    "--temperature", $Temperature
+    "--temperature", $Temperature,
+    "--prompt-profile", $PromptProfile
 )
 
 if ($CheckpointDir) {

@@ -58,9 +58,9 @@ from decomp_clarifier.training.sft.data import (
     load_sft_records,
     prompt_completion_from_record,
 )
+from decomp_clarifier.training.utils import telemetry as training_telemetry
 from decomp_clarifier.training.utils.hardware import detect_hardware
 from decomp_clarifier.training.utils.memory_profiles import select_memory_profile
-from decomp_clarifier.training.utils import telemetry as training_telemetry
 from decomp_clarifier.training.utils.trl_compat import (
     ensure_model_warnings_issued,
     normalize_optional_flag,
@@ -180,7 +180,9 @@ def test_transient_snapshot_error_detection() -> None:
         RuntimeError("[WinError 10051] A socket operation was attempted to an unreachable network")
     )
     assert sft_model._is_transient_snapshot_error(
-        RuntimeError("[WinError 10054] An existing connection was forcibly closed by the remote host")
+        RuntimeError(
+            "[WinError 10054] An existing connection was forcibly closed by the remote host"
+        )
     )
     assert not sft_model._is_transient_snapshot_error(RuntimeError("Repository not found"))
 
@@ -401,7 +403,10 @@ def test_training_utilities_and_rewards(
         cleaned_c="int helper(void) { foo(); bar(); baz(); qux(); return 0; }",
     )
     assert hallucination_penalty(hallucinating_output, ["puts"], []) == 1.0
-    assert overshoot_penalty("int helper(void) { return 0; }", "int helper(void) { return 0; }") == 0.0
+    assert (
+        overshoot_penalty("int helper(void) { return 0; }", "int helper(void) { return 0; }")
+        == 0.0
+    )
     assert (
         overshoot_penalty(
             "int helper(void) { int total = 0; total += 1; total += 2; total += 3; return total; }",
@@ -466,7 +471,8 @@ def test_training_utilities_and_rewards(
         encoding="utf-8",
     )
     rl_records = load_rl_records(rl_path)
-    assert prompt_from_record(rl_records[0]) == "prompt text"
+    assert prompt_from_record(rl_records[0]) == [{"role": "user", "content": "prompt text"}]
+    assert prompt_from_record({"prompt": "fallback prompt"}) == "fallback prompt"
     empty_fields = reward_fields_from_record({})
     assert empty_fields["task_type"] == "full_clarify"
     assert empty_fields["raw_code"] == ""
@@ -700,7 +706,7 @@ def test_model_source_access_attempts_dns_fallback_before_online_lookup(monkeypa
             "decompiler_type_penalty": 0.0,
         },
     )
-    assert compile_failure_capped_reward > 0.0
+    assert compile_failure_capped_reward <= 0.0
     assert compile_failure_capped_reward < compile_success_reward
 
     guarded_multi_function_reward = weighted_reward(
@@ -1250,6 +1256,19 @@ def test_run_training_wrappers_with_fake_modules(
 
     sft_payload = json.loads(sft_manifest.read_text(encoding="utf-8"))
     grpo_payload = json.loads(grpo_manifest.read_text(encoding="utf-8"))
+    assert grpo_payload["model"]["base_model_id"] == "Qwen/Qwen3.5-4B"
+    trainer_payload = grpo_payload["trainer"]
+    assert trainer_payload["class"].endswith("FakeGRPOTrainer")
+    assert trainer_payload["loss_type"] == "dr_grpo"
+    assert trainer_payload["scale_rewards"] == "group"
+    assert trainer_payload["reward_objectives"] == [
+        {"name": "correctness", "field": "core_total"},
+        {"name": "style", "field": "style_total"},
+        {"name": "constraints", "field": "constraint_total"},
+    ]
+    assert trainer_payload["reward_weights"] == [1.0, 2.0, 0.5]
+    assert trainer_payload["source_path"]
+    assert trainer_payload["source_sha256"]
 
     for payload, stage, plot_name in (
         (sft_payload, "sft", "loss"),

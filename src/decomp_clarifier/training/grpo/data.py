@@ -13,7 +13,22 @@ def load_rl_records(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def prompt_from_record(record: dict[str, Any]) -> str:
+PromptValue = str | list[dict[str, str]]
+
+
+def prompt_from_record(record: dict[str, Any]) -> PromptValue:
+    prompt_messages = record.get("prompt_messages")
+    if isinstance(prompt_messages, list) and prompt_messages:
+        messages: list[dict[str, str]] = []
+        for message in prompt_messages:
+            if not isinstance(message, dict):
+                return str(record["prompt"])
+            role = message.get("role")
+            content = message.get("content")
+            if not isinstance(role, str) or not isinstance(content, str):
+                return str(record["prompt"])
+            messages.append({"role": role, "content": content})
+        return messages
     return str(record["prompt"])
 
 

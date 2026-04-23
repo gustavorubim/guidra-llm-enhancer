@@ -1,6 +1,8 @@
 param(
     [string]$TrainingProfile = "grpo_qwen35_2b",
-    [string]$AppProfile = "default"
+    [string]$AppProfile = "default",
+    [string]$BaseModelId = "",
+    [switch]$AllowRawBase
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +16,13 @@ $args = @(
     "--training-profile", $TrainingProfile,
     "--app-profile", $AppProfile
 )
+
+if ($BaseModelId) {
+    $args += @("--base-model-id", $BaseModelId)
+}
+if ($AllowRawBase) {
+    $args += @("--allow-raw-base")
+}
 
 & $python.Path @args
 $returnCode = $LASTEXITCODE

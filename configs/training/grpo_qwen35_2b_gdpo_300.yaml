@@ -32,6 +32,7 @@ training:
   execution_pass_rate_threshold: 1.0
   min_completion_ratio: 0.2
   max_completion_ratio: 1.5
+  max_invalid_completion_ratio: 0.9
   max_function_count: 1
   reward_weights:
     format: 1.0
@@ -45,3 +46,7 @@ training:
     decompiler_type_penalty: 0.75
     overshoot_penalty: 1.0
     multi_function_penalty: 3.0
+    invalid_json_penalty: 0.35
+    invalid_length_penalty: 1.0
+    truncation_penalty: 2.0
+    invalid_scope_penalty: 2.0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 from decomp_clarifier.c_source import extract_called_functions
@@ -84,7 +85,32 @@ def pack_rl_records(samples: list[FunctionDatasetSample]) -> list[PackedRLRecord
     return records
 
 
-def write_jsonl_records(path: Path, records: list[PackedSFTRecord]) -> DatasetManifest:
+def select_training_samples(
+    samples: Sequence[FunctionDatasetSample],
+    *,
+    split: str = "train",
+    include_task_types: Sequence[str] | None = None,
+    prompt_limit: int | None = None,
+) -> list[FunctionDatasetSample]:
+    if prompt_limit is not None and prompt_limit < 0:
+        raise ValueError("prompt_limit must be non-negative")
+    included = set(include_task_types or [])
+    selected = [
+        sample
+        for sample in samples
+        if sample.split == split and (not included or sample.task_type in included)
+    ]
+    if prompt_limit is None:
+        return selected
+    return selected[:prompt_limit]
+
+
+def write_jsonl_records(
+    path: Path,
+    records: list[PackedSFTRecord],
+    *,
+    split_counts: dict[str, int] | None = None,
+) -> DatasetManifest:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(record.model_dump_json() for record in records) + ("\n" if records else ""),
@@ -95,7 +121,7 @@ def write_jsonl_records(path: Path, records: list[PackedSFTRecord]) -> DatasetMa
         task_counts[record.task_type] = task_counts.get(record.task_type, 0) + 1
     manifest = DatasetManifest(
         record_count=len(records),
-        split_counts={},
+        split_counts=split_counts or {},
         task_counts=task_counts,
         output_path=str(path),
     )

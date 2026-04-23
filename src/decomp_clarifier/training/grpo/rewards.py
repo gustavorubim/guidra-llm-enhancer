@@ -458,6 +458,8 @@ def reward_breakdown(
     effective_behavior_score = (
         behavior_score if behavior_score is not None else (1.0 if behavior_success else 0.0)
     )
+    if not compile_success:
+        effective_behavior_score = 0.0
     behavior_value = behavior_reward(
         effective_behavior_score if behavior_improvement else 0.0
     )
@@ -476,11 +478,13 @@ def reward_breakdown(
         + weights.get("behavior", 1.0) * behavior_value
         + weights.get("signature", 0.0) * signature_value
     )
-    style_total = gate_factor * (
-        weights.get("cleanup", 1.0) * cleanup_value * style_scales["cleanup"]
-        + weights.get("naming", 1.0) * naming_value * style_scales["naming"]
-        + weights.get("readability", 1.0) * readability_value * style_scales["readability"]
-    )
+    style_total = 0.0
+    if compile_success:
+        style_total = gate_factor * (
+            weights.get("cleanup", 1.0) * cleanup_value * style_scales["cleanup"]
+            + weights.get("naming", 1.0) * naming_value * style_scales["naming"]
+            + weights.get("readability", 1.0) * readability_value * style_scales["readability"]
+        )
     penalty_total = (
         weights.get("hallucination_penalty", 1.0) * hallucination_value
         + weights.get("decompiler_type_penalty", 0.0) * decompiler_type_value
@@ -493,6 +497,8 @@ def reward_breakdown(
     if compile_success and not behavior_success:
         failure_penalty += weights.get("behavior", 1.0) * _BEHAVIOR_FAILURE_PENALTY
     core_total -= failure_penalty
+    if not compile_success:
+        core_total = min(core_total, 0.0)
     constraint_total = -penalty_total
     total = core_total + style_total + constraint_total
     return {

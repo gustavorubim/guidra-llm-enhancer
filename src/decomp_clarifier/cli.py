@@ -21,7 +21,12 @@ from decomp_clarifier.baselines.openrouter_structured import OpenRouterStructure
 from decomp_clarifier.baselines.simple_llm_cleanup import PromptOnlyCleanupBaseline
 from decomp_clarifier.compilation.build_runner import BuildRunner
 from decomp_clarifier.dataset.builders import build_function_dataset
-from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
+from decomp_clarifier.dataset.packers import (
+    pack_rl_records,
+    pack_sft_records,
+    select_training_samples,
+    write_jsonl_records,
+)
 from decomp_clarifier.doctor import build_doctor_report, doctor_exit_code, render_doctor_report
 from decomp_clarifier.evaluation.metrics import placeholder_ratio
 from decomp_clarifier.evaluation.readability_eval import score_readability
@@ -409,8 +414,50 @@ def _run_checkpoint_evaluation(*args: Any, **kwargs: Any) -> Any:
     return run_checkpoint_evaluation(*args, **kwargs)
 
 
-def _resolve_grpo_base_model(paths: ProjectPaths, training_config: TrainingConfig) -> str:
+def _is_completed_sft_checkpoint(value: str, paths: ProjectPaths) -> bool:
+    candidate = Path(value)
+    checkpoint_path = candidate if candidate.is_absolute() else paths.root / candidate
+    paths_to_check = [checkpoint_path, checkpoint_path / "model", *checkpoint_path.parents[:3]]
+    return any((path / "sft_training_manifest.json").exists() for path in paths_to_check)
+
+
+def _ensure_grpo_base_model_is_sft_checkpoint(
+    paths: ProjectPaths,
+    training_config: TrainingConfig,
+    *,
+    training_profile: str,
+    allow_raw_base: bool,
+) -> None:
+    source_profile = training_config.model.source_training_profile
+    base_model_id = training_config.model.base_model_id
+    if not source_profile or not base_model_id or allow_raw_base:
+        return
+    if _is_completed_sft_checkpoint(base_model_id, paths):
+        return
+    raise typer.BadParameter(
+        f"training_profile={training_profile!r} is configured with source_training_profile="
+        f"{source_profile!r} must start from a completed SFT checkpoint. "
+        f"{base_model_id!r} is not a local SFT checkpoint; rerun without "
+        "--base-model-id to auto-select SFT, pass an SFT checkpoint path, or use "
+        "--allow-raw-base for an intentional raw-model ablation.",
+        param_hint="--base-model-id",
+    )
+
+
+def _resolve_grpo_base_model(
+    paths: ProjectPaths,
+    training_config: TrainingConfig,
+    *,
+    training_profile: str,
+    allow_raw_base: bool = False,
+) -> str:
     if training_config.model.base_model_id:
+        _ensure_grpo_base_model_is_sft_checkpoint(
+            paths,
+            training_config,
+            training_profile=training_profile,
+            allow_raw_base=allow_raw_base,
+        )
         return training_config.model.base_model_id
     from decomp_clarifier.evaluation.checkpoint_eval import find_latest_completed_checkpoint
 
@@ -628,11 +675,13 @@ def build_dataset(
         "dataset", app_profile=app_profile
     )
     dataset_config: DatasetConfig = load_dataset_config(root, name=dataset_profile)
+    rl_dataset_config: DatasetConfig = load_dataset_config(root, name="rl")
     _write_resolved(
         run_dir / "resolved_config.yaml",
         {
             "app": app_config.model_dump(mode="python"),
             "dataset": dataset_config.model_dump(mode="python"),
+            "rl_dataset": rl_dataset_config.model_dump(mode="python"),
         },
     )
     projects = _load_generated_projects(paths)
@@ -651,20 +700,43 @@ def build_dataset(
         config=dataset_config,
         output_dir=paths.processed_sft_dir,
     )
-    records = pack_sft_records(samples)
-    manifest = write_jsonl_records(paths.processed_sft_dir / "sft_records.jsonl", records)
-    rl_records = pack_rl_records(samples)
+    sft_samples = select_training_samples(samples, split="train")
+    records = pack_sft_records(sft_samples)
+    manifest = write_jsonl_records(
+        paths.processed_sft_dir / "sft_records.jsonl",
+        records,
+        split_counts={"train": len(sft_samples)},
+    )
+    rl_samples = select_training_samples(
+        samples,
+        split="train",
+        include_task_types=rl_dataset_config.dataset.include_task_types,
+        prompt_limit=rl_dataset_config.dataset.prompt_limit,
+    )
+    rl_records = pack_rl_records(rl_samples)
     rl_path = paths.processed_rl_dir / "rl_records.jsonl"
     rl_path.parent.mkdir(parents=True, exist_ok=True)
     rl_path.write_text(
         "\n".join(record.model_dump_json() for record in rl_records) + ("\n" if rl_records else ""),
         encoding="utf-8",
     )
+    split_counts = {
+        split: sum(1 for sample in samples if sample.split == split)
+        for split in {"train", "val", "test"}
+    }
+    rl_task_counts: dict[str, int] = {}
+    for record in rl_records:
+        rl_task_counts[record.task_type] = rl_task_counts.get(record.task_type, 0) + 1
     metrics = {
         "run_id": run_id,
         "samples": len(samples),
+        "split_counts": split_counts,
         "packed": manifest.record_count,
+        "sft_packed": manifest.record_count,
         "rl_packed": len(rl_records),
+        "rl_task_counts": rl_task_counts,
+        "rl_include_task_types": rl_dataset_config.dataset.include_task_types,
+        "rl_prompt_limit": rl_dataset_config.dataset.prompt_limit,
     }
     (run_dir / "metrics.json").write_text(
         json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8"
@@ -1040,6 +1112,14 @@ def train_grpo(
             "GRPO starting point. Overrides the profile's base_model_id/source_training_profile."
         ),
     ),
+    allow_raw_base: bool = typer.Option(
+        False,
+        "--allow-raw-base",
+        help=(
+            "Permit overriding an SFT-sourced GRPO/GDPO profile with a raw Hugging Face "
+            "model id. Intended only for ablations."
+        ),
+    ),
     app_profile: str = typer.Option("default"),
 ) -> None:
     _root, paths, run_id, run_dir, logger, app_config = _bootstrap(
@@ -1048,8 +1128,20 @@ def train_grpo(
     training_config: TrainingConfig = load_training_config(paths.root, training_profile)
     if base_model_id:
         training_config.model.base_model_id = base_model_id
-        training_config.model.source_training_profile = None
-    resolved_base_model = _resolve_grpo_base_model(paths, training_config)
+        _ensure_grpo_base_model_is_sft_checkpoint(
+            paths,
+            training_config,
+            training_profile=training_profile,
+            allow_raw_base=allow_raw_base,
+        )
+        if not _is_completed_sft_checkpoint(base_model_id, paths):
+            training_config.model.source_training_profile = None
+    resolved_base_model = _resolve_grpo_base_model(
+        paths,
+        training_config,
+        training_profile=training_profile,
+        allow_raw_base=allow_raw_base,
+    )
     _write_resolved(
         run_dir / "resolved_config.yaml",
         {
@@ -1082,6 +1174,10 @@ def eval_sft_checkpoint(
     inspection_sample_count: int = typer.Option(8),
     max_new_tokens: int = typer.Option(384),
     temperature: float = typer.Option(0.0),
+    prompt_profile: str = typer.Option(
+        "stage",
+        help="Prompt formatter for checkpoint eval: stage, compact, or full.",
+    ),
     app_profile: str = typer.Option("default"),
 ) -> None:
     from decomp_clarifier.evaluation.checkpoint_eval import find_latest_completed_checkpoint
@@ -1115,6 +1211,7 @@ def eval_sft_checkpoint(
         inspection_sample_count=inspection_sample_count,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
+        prompt_profile=prompt_profile,
     )
     _write_resolved(
         run_dir / "resolved_config.yaml",
@@ -1128,6 +1225,7 @@ def eval_sft_checkpoint(
             "inspection_sample_count": inspection_sample_count,
             "max_new_tokens": max_new_tokens,
             "temperature": temperature,
+            "prompt_profile": prompt_profile,
         },
     )
     logger.info("completed eval-sft-checkpoint manifest=%s", artifacts.manifest_path)
@@ -1143,6 +1241,10 @@ def eval_grpo_checkpoint(
     inspection_sample_count: int = typer.Option(8),
     max_new_tokens: int = typer.Option(384),
     temperature: float = typer.Option(0.0),
+    prompt_profile: str = typer.Option(
+        "stage",
+        help="Prompt formatter for checkpoint eval: stage, compact, or full.",
+    ),
     app_profile: str = typer.Option("default"),
 ) -> None:
     from decomp_clarifier.evaluation.checkpoint_eval import find_latest_completed_checkpoint
@@ -1176,6 +1278,7 @@ def eval_grpo_checkpoint(
         inspection_sample_count=inspection_sample_count,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
+        prompt_profile=prompt_profile,
     )
     _write_resolved(
         run_dir / "resolved_config.yaml",
@@ -1189,6 +1292,7 @@ def eval_grpo_checkpoint(
             "inspection_sample_count": inspection_sample_count,
             "max_new_tokens": max_new_tokens,
             "temperature": temperature,
+            "prompt_profile": prompt_profile,
         },
     )
     logger.info("completed eval-grpo-checkpoint manifest=%s", artifacts.manifest_path)

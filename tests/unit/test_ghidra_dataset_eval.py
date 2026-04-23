@@ -10,7 +10,12 @@ from decomp_clarifier.adapters.ghidra_headless import GhidraHeadlessAdapter
 from decomp_clarifier.baselines import naming_only, raw_ghidra
 from decomp_clarifier.baselines.simple_llm_cleanup import heuristic_cleanup
 from decomp_clarifier.compilation.binary_inventory import binary_format_for_host
-from decomp_clarifier.dataset.packers import pack_rl_records, pack_sft_records, write_jsonl_records
+from decomp_clarifier.dataset.packers import (
+    pack_rl_records,
+    pack_sft_records,
+    select_training_samples,
+    write_jsonl_records,
+)
 from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
 from decomp_clarifier.dataset.splitters import split_project_ids
 from decomp_clarifier.evaluation.behavior_eval import behavior_similarity, is_behavior_improvement
@@ -111,6 +116,14 @@ def test_parse_exports_align_dataset_and_export_runner(
     manifest = write_jsonl_records(tmp_path / "packed" / "sft.jsonl", records)
     assert manifest.record_count == 9
     assert set(manifest.task_counts) == {"full_clarify", "cleanup", "rename"}
+    curated_samples = select_training_samples(
+        sample_dataset_samples,
+        split="train",
+        include_task_types=["full_clarify", "cleanup"],
+        prompt_limit=4,
+    )
+    assert len(curated_samples) == 4
+    assert {sample.task_type for sample in curated_samples} <= {"full_clarify", "cleanup"}
     rl_records = pack_rl_records(sample_dataset_samples)
     assert len(rl_records) == len(sample_dataset_samples)
     assert rl_records[0].source_function_name == sample_dataset_samples[0].source_function_name

@@ -40,3 +40,4 @@ training:
     invalid_json_penalty: 0.25
     invalid_length_penalty: 1.0
     truncation_penalty: 2.0
+    invalid_scope_penalty: 2.0

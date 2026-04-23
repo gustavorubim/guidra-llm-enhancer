@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import inspect
 import json
 import logging
 from pathlib import Path
@@ -72,6 +74,26 @@ def _resolve_multi_reward_weights(configured: list[float] | None) -> list[float]
             f"expected {len(_OBJECTIVE_FIELDS)}, got {len(resolved)}"
         )
     return resolved
+
+
+def _trainer_provenance(trainer_cls: type[object]) -> dict[str, object]:
+    source_path: str | None = None
+    source_sha256: str | None = None
+    try:
+        raw_source_path = inspect.getsourcefile(trainer_cls) or inspect.getfile(trainer_cls)
+    except TypeError:
+        raw_source_path = None
+    if raw_source_path:
+        path = Path(raw_source_path)
+        source_path = str(path)
+        if path.exists() and path.is_file():
+            source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {
+        "class": f"{trainer_cls.__module__}.{trainer_cls.__qualname__}",
+        "module": trainer_cls.__module__,
+        "source_path": source_path,
+        "source_sha256": source_sha256,
+    }
 
 
 def compute_completion_reward(
@@ -243,6 +265,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
 
     from decomp_clarifier.training.sft.model import load_model_and_tokenizer
 
+    trainer_provenance = _trainer_provenance(GRPOTrainer)
     model, tokenizer = load_model_and_tokenizer(config)
     text_tokenizer = getattr(tokenizer, "tokenizer", tokenizer)
     if getattr(text_tokenizer, "pad_token", None) is None:
@@ -344,6 +367,18 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         if config.training.mask_truncated_completions is not None
         else True
     )
+    trainer_provenance |= {
+        "loss_type": loss_type,
+        "scale_rewards": scale_rewards,
+        "beta": beta,
+        "mask_truncated_completions": mask_truncated_completions,
+        "reward_objectives": [
+            {"name": objective_name, "field": field_name}
+            for objective_name, field_name in _OBJECTIVE_FIELDS
+        ],
+        "reward_weights": multi_reward_weights,
+        "component_reward_weights": component_weights,
+    }
     reward_step = 0
     cached_reward_key: tuple[object, ...] | None = None
     cached_reward_details: list[dict[str, float]] | None = None
@@ -556,6 +591,12 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 "versions": versions,
                 "hardware": hardware,
                 "dataset": str(dataset_path),
+                "model": {
+                    "base_model_id": config.model.base_model_id,
+                    "source_training_profile": config.model.source_training_profile,
+                    "loader_variant": config.model.loader_variant,
+                },
+                "trainer": trainer_provenance,
                 "telemetry": telemetry_summary,
             },
             indent=2,
