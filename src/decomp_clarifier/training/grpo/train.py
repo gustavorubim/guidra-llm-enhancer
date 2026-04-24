@@ -96,6 +96,30 @@ def _trainer_provenance(trainer_cls: type[object]) -> dict[str, object]:
     }
 
 
+def _completion_text(completion: object) -> str:
+    if isinstance(completion, str):
+        return completion
+    if isinstance(completion, dict):
+        content = completion.get("content")
+        if isinstance(content, str):
+            return content
+        text = completion.get("text")
+        if isinstance(text, str):
+            return text
+        return json.dumps(completion, sort_keys=True)
+    if isinstance(completion, list):
+        for item in reversed(completion):
+            if (
+                isinstance(item, dict)
+                and item.get("role") == "assistant"
+                and isinstance(item.get("content"), str)
+            ):
+                return item["content"]
+        parts = [_completion_text(item).strip() for item in completion]
+        return "\n".join(part for part in parts if part)
+    return str(completion)
+
+
 def compute_completion_reward(
     completion: str,
     task_type: str,
@@ -385,7 +409,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
     cached_reward_uses_remaining = 0
 
     def _reward_details_batch(
-        completions: list[str],
+        completions: list[object],
         source_function_name: list[str] | None = None,
         *,
         task_type: list[str] | None = None,
@@ -404,6 +428,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         nonlocal cached_reward_details
         nonlocal cached_reward_uses_remaining
         n = len(completions)
+        completion_texts = [_completion_text(completion) for completion in completions]
         task_types = task_type or ["full_clarify"] * n
         function_names = source_function_name or [""] * n
         raw_codes = raw_code or [""] * n
@@ -415,7 +440,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
         compiler_commands = compiler_executable or [None] * n
         test_refs = tests_ref or [""] * n
         reward_key = (
-            tuple(completions),
+            tuple(completion_texts),
             tuple(function_names),
             tuple(task_types),
             tuple(raw_codes),
@@ -440,7 +465,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
             return details
         details = [
             compute_completion_reward_details(
-                completion=completion,
+                completion=completion_text,
                 task_type=task_types[index % len(task_types)],
                 source_function_name=function_names[index % len(function_names)],
                 raw_code=raw_codes[index % len(raw_codes)],
@@ -459,7 +484,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
                 max_invalid_completion_ratio=max_invalid_completion_ratio,
                 max_function_count=max_function_count,
             )
-            for index, completion in enumerate(completions)
+            for index, completion_text in enumerate(completion_texts)
         ]
         reward_step += 1
         reward_metrics = reward_log_row([item["total"] for item in details], step=reward_step)
@@ -486,7 +511,7 @@ def run_grpo_training(dataset_path: Path, output_dir: Path, config: TrainingConf
 
     def _make_reward_func(objective_name: str, field_name: str):
         def reward_func(
-            completions: list[str],
+            completions: list[object],
             source_function_name: list[str] | None = None,
             **kwargs: object,
         ) -> list[float]:

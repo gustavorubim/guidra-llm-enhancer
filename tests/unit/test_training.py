@@ -48,6 +48,7 @@ from decomp_clarifier.training.grpo.rewards import (
     weighted_reward,
 )
 from decomp_clarifier.training.grpo.train import (
+    _completion_text,
     _resolve_multi_reward_weights,
     compute_completion_reward,
 )
@@ -100,6 +101,19 @@ def _version_with_fallback(name: str):
 def test_resolve_multi_reward_weights_rejects_wrong_length() -> None:
     with pytest.raises(ValueError, match="must match the number of reward functions"):
         _resolve_multi_reward_weights([1.0, 2.0])
+
+
+def test_completion_text_extracts_conversational_completion() -> None:
+    assert (
+        _completion_text(
+            [
+                {"role": "assistant", "content": '{"summary":"ok","cleaned_c":"int x;"}'}
+            ]
+        )
+        == '{"summary":"ok","cleaned_c":"int x;"}'
+    )
+    assert _completion_text({"content": "plain content"}) == "plain content"
+    assert _completion_text(["prefix", {"content": "body"}]) == "prefix\nbody"
 
 
 def test_model_source_access_sets_offline_mode_for_cached_remote_model(monkeypatch) -> None:
@@ -1147,7 +1161,17 @@ def test_run_training_wrappers_with_fake_modules(
             reward_funcs = self.kwargs.get("reward_funcs", [])
             for reward_func in reward_funcs:
                 reward_func(
-                    ["test completion"],
+                    [
+                        [
+                            {
+                                "role": "assistant",
+                                "content": (
+                                    '{"summary":"ok","confidence":1.0,"renamings":{},'
+                                    '"cleaned_c":"int helper(void) { return 0; }"}'
+                                ),
+                            }
+                        ]
+                    ],
                     source_function_name=["helper"],
                     raw_code=["int uVar3(void){ int local_10; return local_10; }"],
                     compile_reference_source=["int helper(void) { return 0; }"],
