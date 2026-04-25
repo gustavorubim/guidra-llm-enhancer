@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
+from decomp_clarifier.dataset.prompt_formatter import (
+    format_context_plus_prompt,
+    format_context_plus_strict_prompt,
+    format_prompt,
+    format_rl_prompt,
+)
 from decomp_clarifier.evaluation.checkpoint_eval import (
     find_latest_completed_checkpoint,
     resolve_checkpoint_prompt_formatter,
@@ -39,6 +44,14 @@ def test_resolve_checkpoint_prompt_formatter() -> None:
     assert resolve_checkpoint_prompt_formatter("sft", "stage") is format_prompt
     assert resolve_checkpoint_prompt_formatter("sft", "compact") is format_rl_prompt
     assert resolve_checkpoint_prompt_formatter("grpo", "full") is format_prompt
+    assert (
+        resolve_checkpoint_prompt_formatter("grpo", "context_plus")
+        is format_context_plus_prompt
+    )
+    assert (
+        resolve_checkpoint_prompt_formatter("grpo", "context_plus_strict")
+        is format_context_plus_strict_prompt
+    )
     with pytest.raises(ValueError, match="prompt_profile"):
         resolve_checkpoint_prompt_formatter("grpo", "bad")
 

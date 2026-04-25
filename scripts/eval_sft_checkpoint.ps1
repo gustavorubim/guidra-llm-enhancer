@@ -7,6 +7,7 @@ param(
     [int]$MaxNewTokens = 384,
     [double]$Temperature = 0.0,
     [string]$PromptProfile = "stage",
+    [switch]$Thinking,
     [int]$SampleLimit = 0
 )
 
@@ -32,6 +33,9 @@ if ($CheckpointDir) {
 }
 if ($SampleLimit -gt 0) {
     $args += @("--sample-limit", $SampleLimit)
+}
+if ($Thinking) {
+    $args += @("--thinking")
 }
 
 & $python.Path @args

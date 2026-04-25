@@ -6,6 +6,8 @@ from decomp_clarifier.research.grpo_campaign import (
     _profile_eval_max_new_tokens,
     apply_training_overrides,
     choose_campaign_experiment,
+    pack_campaign_rl_records,
+    sft_target_passed,
 )
 from decomp_clarifier.settings import load_training_config
 
@@ -163,3 +165,176 @@ def test_choose_campaign_experiment_long300_skips_completed_candidates() -> None
     )
     assert choice is not None
     assert choice.experiment_id == "long300_gradaccum2_v1"
+
+
+def test_choose_campaign_experiment_prioritizes_prompt_alignment_after_json_is_healthy() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 0.99,
+            "compile_success_rate": 0.67,
+            "behavior_success_rate": 0.54,
+        },
+        {},
+        set(),
+    )
+    assert choice is not None
+    assert choice.experiment_id == "prompt_align_full_v1"
+
+
+def test_choose_campaign_experiment_uses_constant_guard_after_context_plus_trials() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 1.0,
+            "compile_success_rate": 0.60,
+            "behavior_success_rate": 0.42,
+        },
+        {},
+        {
+            "prompt_align_full_v1",
+            "prompt_align_context_plus_v1",
+            "prompt_align_context_plus_no_rename_v1",
+        },
+    )
+    assert choice is not None
+    assert choice.experiment_id == "context_plus_constant_guard_v1"
+
+
+def test_choose_campaign_experiment_uses_strict_json_after_constant_guard() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 0.98,
+            "compile_success_rate": 0.62,
+            "behavior_success_rate": 0.44,
+        },
+        {},
+        {
+            "prompt_align_full_v1",
+            "prompt_align_context_plus_v1",
+            "prompt_align_context_plus_no_rename_v1",
+            "context_plus_constant_guard_v1",
+        },
+    )
+    assert choice is not None
+    assert choice.experiment_id == "context_plus_constant_strict_json_v1"
+
+
+def test_choose_campaign_experiment_uses_type_guard_after_strict_json() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 1.0,
+            "compile_success_rate": 0.63,
+            "behavior_success_rate": 0.49,
+        },
+        {},
+        {
+            "prompt_align_full_v1",
+            "prompt_align_context_plus_v1",
+            "prompt_align_context_plus_no_rename_v1",
+            "context_plus_constant_guard_v1",
+            "context_plus_constant_strict_json_v1",
+        },
+    )
+    assert choice is not None
+    assert choice.experiment_id == "context_plus_strict_type_guard_v1"
+
+
+def test_choose_campaign_experiment_uses_behavior_nudge_after_type_guard() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 1.0,
+            "compile_success_rate": 0.63,
+            "behavior_success_rate": 0.49,
+        },
+        {},
+        {
+            "prompt_align_full_v1",
+            "prompt_align_context_plus_v1",
+            "prompt_align_context_plus_no_rename_v1",
+            "context_plus_constant_guard_v1",
+            "context_plus_constant_strict_json_v1",
+            "context_plus_strict_type_guard_v1",
+        },
+    )
+    assert choice is not None
+    assert choice.experiment_id == "context_plus_strict_behavior_nudge_v1"
+
+
+def test_choose_campaign_experiment_uses_long500_after_behavior_nudge() -> None:
+    choice = choose_campaign_experiment(
+        {
+            "json_valid_rate": 1.0,
+            "compile_success_rate": 0.63,
+            "behavior_success_rate": 0.49,
+        },
+        {},
+        {
+            "prompt_align_full_v1",
+            "prompt_align_context_plus_v1",
+            "prompt_align_context_plus_no_rename_v1",
+            "context_plus_constant_guard_v1",
+            "context_plus_constant_strict_json_v1",
+            "context_plus_strict_type_guard_v1",
+            "context_plus_strict_behavior_nudge_v1",
+        },
+    )
+    assert choice is not None
+    assert choice.experiment_id == "context_plus_strict_long500_v1"
+
+
+def test_sft_target_passed_requires_score_gain_and_safety_gates() -> None:
+    sft_metrics = {
+        "json_valid_rate": 0.99,
+        "compile_success_rate": 0.66,
+        "behavior_success_rate": 0.53,
+    }
+    assert sft_target_passed(
+        {
+            "json_valid_rate": 0.99,
+            "compile_success_rate": 0.66,
+            "behavior_success_rate": 0.54,
+        },
+        candidate_score=0.765,
+        sft_metrics=sft_metrics,
+        sft_score=0.742,
+        target_improvement=0.02,
+    )
+    assert not sft_target_passed(
+        {
+            "json_valid_rate": 0.99,
+            "compile_success_rate": 0.62,
+            "behavior_success_rate": 0.54,
+        },
+        candidate_score=0.765,
+        sft_metrics=sft_metrics,
+        sft_score=0.742,
+        target_improvement=0.02,
+    )
+
+
+def test_pack_campaign_rl_records_supports_full_prompt(sample_dataset_samples) -> None:
+    records = pack_campaign_rl_records(
+        sample_dataset_samples,
+        prompt_mode="full",
+        task_types=["full_clarify", "rename"],
+        prompt_limit=3,
+    )
+    assert len(records) == 3
+    assert {record.task_type for record in records} <= {"full_clarify", "rename"}
+    assert "Assembly:" in records[0].prompt
+    assert records[0].prompt_messages[0].content == records[0].prompt
+    assert sample_dataset_samples[0].source_function_name in records[0].allowed_callees
+
+
+def test_pack_campaign_rl_records_supports_strict_context_prompt(
+    sample_dataset_samples,
+) -> None:
+    records = pack_campaign_rl_records(
+        sample_dataset_samples,
+        prompt_mode="context_plus_strict",
+        task_types=["full_clarify"],
+        prompt_limit=1,
+    )
+
+    assert len(records) == 1
+    assert "Keep renamings small" in records[0].prompt
+    assert "Assembly:" not in records[0].prompt

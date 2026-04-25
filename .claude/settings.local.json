@@ -10,7 +10,9 @@
       "Bash(python -c \"import json; d=json.load\\(open\\('artifacts/reports/eval-20260411-185302.json', encoding='utf-8'\\)\\); print\\(json.dumps\\(d.get\\('metrics', d.get\\('summary', {}\\)\\), indent=2\\)\\)\")",
       "Bash(python3 -m json.tool)",
       "Bash(python3:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
     ]
   }
 }

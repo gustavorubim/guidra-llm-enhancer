@@ -6,26 +6,38 @@ import logging
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from decomp_clarifier.c_source import extract_called_functions
+from decomp_clarifier.dataset.prompt_formatter import (
+    format_context_plus_prompt,
+    format_context_plus_strict_prompt,
+    format_prompt,
+    format_rl_prompt,
+    prompt_messages,
+)
 from decomp_clarifier.paths import ProjectPaths
 from decomp_clarifier.research.autoresearch import (
     RewardTelemetrySnapshot,
     classify_invalid_prediction_rows,
     score_metrics,
 )
+from decomp_clarifier.schemas.dataset import FunctionDatasetSample, PackedRLRecord
 from decomp_clarifier.settings import load_dotenv
 
-DEFAULT_SEED_PROFILE = "configs/training/grpo_qwen35_2b_guarded_pilot.yaml"
+DEFAULT_SEED_PROFILE = "configs/training/grpo_qwen35_2b_gdpo_300.yaml"
 DEFAULT_SCOUT_SAMPLE_LIMIT = 50
 DEFAULT_KEEP_IMPROVEMENT = 0.005
 DEFAULT_CONFIRM_IMPROVEMENT = 0.01
+DEFAULT_TARGET_IMPROVEMENT = 0.02
+DEFAULT_EVAL_PROMPT_PROFILE = "full"
+DEFAULT_EVAL_MAX_NEW_TOKENS = 1024
 DEFAULT_SEARCH_SPACE = "default"
 _SCORE_KEYS = (
     "json_valid_rate",
@@ -35,6 +47,14 @@ _SCORE_KEYS = (
     "behavior_success_rate",
     "naming_score",
 )
+
+
+PROMPT_BUILDERS: dict[str, PromptBuilder] = {
+    "compact": format_rl_prompt,
+    "context_plus": format_context_plus_prompt,
+    "context_plus_strict": format_context_plus_strict_prompt,
+    "full": format_prompt,
+}
 
 
 class CampaignError(RuntimeError):
@@ -47,6 +67,10 @@ class CampaignExperiment:
     hypothesis: str
     short_description: str
     overrides: dict[str, Any]
+    dataset_overrides: dict[str, Any] = field(default_factory=dict)
+
+
+PromptBuilder = Callable[[FunctionDatasetSample], str]
 
 
 def _long300_campaign_candidates() -> list[CampaignExperiment]:
@@ -168,7 +192,8 @@ def _long300_campaign_candidates() -> list[CampaignExperiment]:
             experiment_id="long300_signature_up_v1",
             hypothesis=(
                 "The long-horizon control already has a good verifier curve. A slightly stronger "
-                "format and signature bias may improve the JSON-valid tail without shrinking budget."
+                "format and signature bias may improve the JSON-valid tail without shrinking "
+                "budget."
             ),
             short_description="300-step signature up",
             overrides={
@@ -371,6 +396,81 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _write_jsonl(path: Path, rows: Sequence[PackedRLRecord]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(row.model_dump_json() for row in rows) + ("\n" if rows else ""),
+        encoding="utf-8",
+    )
+
+
+def _load_function_samples(path: Path, *, split: str) -> list[FunctionDatasetSample]:
+    samples: list[FunctionDatasetSample] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        sample = FunctionDatasetSample.model_validate_json(line)
+        if sample.split == split:
+            samples.append(sample)
+    return samples
+
+
+def _allowed_callees(sample: FunctionDatasetSample) -> list[str]:
+    return list(
+        dict.fromkeys(
+            [
+                *sample.callees,
+                *extract_called_functions(sample.target_clean_code),
+                sample.source_function_name,
+            ]
+        )
+    )
+
+
+def pack_campaign_rl_records(
+    samples: Sequence[FunctionDatasetSample],
+    *,
+    prompt_mode: str,
+    task_types: Sequence[str],
+    prompt_limit: int | None = None,
+) -> list[PackedRLRecord]:
+    if prompt_mode not in PROMPT_BUILDERS:
+        raise CampaignError(
+            f"unknown campaign prompt_mode={prompt_mode!r}; "
+            f"expected one of {sorted(PROMPT_BUILDERS)}"
+        )
+    allowed_task_types = set(task_types)
+    prompt_builder = PROMPT_BUILDERS[prompt_mode]
+    selected = [
+        sample
+        for sample in samples
+        if not allowed_task_types or sample.task_type in allowed_task_types
+    ]
+    if prompt_limit is not None:
+        selected = selected[:prompt_limit]
+    records: list[PackedRLRecord] = []
+    for sample in selected:
+        prompt = prompt_builder(sample)
+        records.append(
+            PackedRLRecord(
+                sample_id=sample.sample_id,
+                task_type=sample.task_type,
+                prompt=prompt,
+                prompt_messages=prompt_messages(prompt),
+                source_function_name=sample.source_function_name,
+                raw_code=sample.ghidra_decompiled_code,
+                compile_reference_source=sample.compile_reference_source or sample.source_code,
+                target_clean_code=sample.target_clean_code,
+                target_renamings=json.dumps(sample.rename_map_target, sort_keys=True),
+                allowed_imports=json.dumps(sample.imports),
+                allowed_callees=json.dumps(_allowed_callees(sample)),
+                compiler_executable=sample.compiler_executable,
+                tests_ref=sample.tests_ref,
+            )
+        )
+    return records
+
+
 def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -390,6 +490,31 @@ def _hard_keep_gates_pass(metrics: Mapping[str, float], champion: Mapping[str, f
         >= float(champion.get("behavior_success_rate", 0.0)) - 0.01
         and float(metrics.get("json_valid_rate", 0.0))
         >= float(champion.get("json_valid_rate", 0.0)) - 0.02
+    )
+
+
+def _sft_target_gates_pass(metrics: Mapping[str, float], sft_metrics: Mapping[str, float]) -> bool:
+    return (
+        float(metrics.get("compile_success_rate", 0.0))
+        >= float(sft_metrics.get("compile_success_rate", 0.0)) - 0.01
+        and float(metrics.get("behavior_success_rate", 0.0))
+        >= float(sft_metrics.get("behavior_success_rate", 0.0)) - 0.01
+        and float(metrics.get("json_valid_rate", 0.0))
+        >= float(sft_metrics.get("json_valid_rate", 0.0)) - 0.02
+    )
+
+
+def sft_target_passed(
+    metrics: Mapping[str, float],
+    *,
+    candidate_score: float,
+    sft_metrics: Mapping[str, float],
+    sft_score: float,
+    target_improvement: float,
+) -> bool:
+    return (
+        _sft_target_gates_pass(metrics, sft_metrics)
+        and candidate_score >= sft_score + target_improvement
     )
 
 
@@ -475,7 +600,10 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def apply_training_overrides(base_payload: Mapping[str, Any], overrides: Mapping[str, Any]) -> dict[str, Any]:
+def apply_training_overrides(
+    base_payload: Mapping[str, Any],
+    overrides: Mapping[str, Any],
+) -> dict[str, Any]:
     def merge(left: Any, right: Any) -> Any:
         if isinstance(left, dict) and isinstance(right, Mapping):
             merged = dict(left)
@@ -522,6 +650,226 @@ def choose_campaign_experiment(
     )
 
     candidates = [
+        CampaignExperiment(
+            experiment_id="prompt_align_full_v1",
+            hypothesis=(
+                "The best checkpoint evaluation uses the full binary-grounded prompt, while the "
+                "current RL dataset trains on a compact prompt. Training GDPO on the same full "
+                "prompt contract, including rename rows and a small naming reward, should make "
+                "the RL update optimize the distribution we actually score."
+            ),
+            short_description="full-prompt RL alignment",
+            overrides={
+                "training": {
+                    "max_seq_length": 2048,
+                    "max_prompt_length": 1152,
+                    "max_completion_length": 384,
+                    "reward_weights": {
+                        "naming": 0.25,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "full",
+                "task_types": ["full_clarify", "cleanup", "rename"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="prompt_align_context_plus_v1",
+            hypothesis=(
+                "Restoring strings and caller/callee context without the full assembly block may "
+                "capture most of the useful eval-time grounding while keeping prompts shorter "
+                "and less likely to truncate inside GRPO."
+            ),
+            short_description="context-plus RL alignment",
+            overrides={
+                "training": {
+                    "max_seq_length": 1792,
+                    "max_prompt_length": 1024,
+                    "max_completion_length": 384,
+                    "reward_weights": {
+                        "naming": 0.2,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus",
+                "task_types": ["full_clarify", "cleanup", "rename"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="prompt_align_context_plus_no_rename_v1",
+            hypothesis=(
+                "Context-plus training recovered the reward signal and improved JSON, naming, "
+                "and readability, but gave back one compile and behavior case on scout. Removing "
+                "rename-only rows and leaving naming reward at zero should preserve the extra "
+                "metadata while moving pressure back to verifier-safe full_clarify and cleanup."
+            ),
+            short_description="context-plus no-rename RL",
+            overrides={
+                "training": {
+                    "max_seq_length": 1792,
+                    "max_prompt_length": 1024,
+                    "max_completion_length": 384,
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="context_plus_constant_guard_v1",
+            hypothesis=(
+                "The context-plus no-rename run gained one verifier-safe count_flag sample, but "
+                "lost two split_kv samples by inventing MAX_VALUE instead of preserving MAX_VAL. "
+                "Adding an opt-in unknown-constant penalty should keep the useful context-plus "
+                "behavior while discouraging out-of-scope macro substitutions."
+            ),
+            short_description="context-plus constant guard",
+            overrides={
+                "training": {
+                    "max_seq_length": 1792,
+                    "max_prompt_length": 1024,
+                    "max_completion_length": 384,
+                    "reward_weights": {
+                        "unknown_constant_penalty": 2.0,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="context_plus_constant_strict_json_v1",
+            hypothesis=(
+                "The constant guard produced a net scout gain in compile and behavior, but it "
+                "lost one JSON sample through a long main rewrite with a bloated rename map. "
+                "Keeping the constant guard while using stricter renaming instructions and "
+                "stronger malformed-output penalties should preserve the hard-metric lift "
+                "without sacrificing JSON validity."
+            ),
+            short_description="constant guard strict JSON",
+            overrides={
+                "training": {
+                    "max_seq_length": 1792,
+                    "max_prompt_length": 1024,
+                    "max_completion_length": 384,
+                    "max_invalid_completion_ratio": 0.65,
+                    "reward_weights": {
+                        "format": 1.1,
+                        "invalid_json_penalty": 0.6,
+                        "invalid_length_penalty": 1.5,
+                        "truncation_penalty": 3.0,
+                        "invalid_scope_penalty": 3.0,
+                        "unknown_constant_penalty": 2.0,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus_strict",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="context_plus_strict_type_guard_v1",
+            hypothesis=(
+                "The strict JSON run is close to the SFT+0.02 target, but paired losses show "
+                "two remaining compile failures from inventing MAX_VALUE and two from changing "
+                "compile-safe integer flags into bool. Increasing constant/type-safety penalties "
+                "and nudging behavior weight should trade less syntax safety for more validator "
+                "wins."
+            ),
+            short_description="strict type and constant guard",
+            overrides={
+                "training": {
+                    "reward_weights": {
+                        "behavior": 4.0,
+                        "compile": 3.75,
+                        "unknown_constant_penalty": 4.0,
+                        "unsupported_bool_penalty": 2.0,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus_strict",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="context_plus_strict_behavior_nudge_v1",
+            hypothesis=(
+                "The type/constant-heavy variant protected JSON but lost compile on scout, so "
+                "the safer next move is to keep the strict JSON champion contract unchanged and "
+                "only nudge behavior reward upward. If the generation-5 gains are real, this "
+                "should look for one or two more behavior wins without over-constraining syntax."
+            ),
+            short_description="strict behavior nudge",
+            overrides={
+                "training": {
+                    "reward_weights": {
+                        "behavior": 4.0,
+                    },
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus_strict",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="context_plus_strict_long500_v1",
+            hypothesis=(
+                "The reward-weight nudges after the strict JSON champion both regressed, which "
+                "points away from reweighting and toward optimization horizon. A 500-step run at "
+                "a lower learning rate keeps the generation-5 reward contract intact while "
+                "giving the stable signal more time to move behavior."
+            ),
+            short_description="strict JSON long 500",
+            overrides={
+                "training": {
+                    "max_steps": 500,
+                    "save_steps": 100,
+                    "learning_rate": 1.0e-6,
+                    "warmup_ratio": 0.05,
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "context_plus_strict",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
+        CampaignExperiment(
+            experiment_id="prompt_align_full_no_rename_v1",
+            hypothesis=(
+                "If rename rows add noisy pressure, the full binary-grounded prompt may still "
+                "help when restricted to full_clarify and cleanup, matching the current curated "
+                "RL task subset while fixing the prompt mismatch."
+            ),
+            short_description="full-prompt no-rename RL",
+            overrides={
+                "training": {
+                    "max_seq_length": 2048,
+                    "max_prompt_length": 1152,
+                    "max_completion_length": 384,
+                }
+            },
+            dataset_overrides={
+                "prompt_mode": "full",
+                "task_types": ["full_clarify", "cleanup"],
+                "prompt_limit": 1000,
+            },
+        ),
         CampaignExperiment(
             experiment_id="completion_256_contract_v1",
             hypothesis=(
@@ -936,6 +1284,16 @@ def choose_campaign_experiment(
     ]
 
     priority: list[str] = []
+    if json_valid_rate >= 0.97 and behavior_rate < 0.58:
+        priority.append("prompt_align_full_v1")
+        priority.append("prompt_align_context_plus_v1")
+        priority.append("prompt_align_context_plus_no_rename_v1")
+        priority.append("context_plus_constant_guard_v1")
+        priority.append("context_plus_constant_strict_json_v1")
+        priority.append("context_plus_strict_type_guard_v1")
+        priority.append("context_plus_strict_behavior_nudge_v1")
+        priority.append("context_plus_strict_long500_v1")
+        priority.append("prompt_align_full_no_rename_v1")
     if low_json:
         priority.append("completion_256_contract_v1")
         priority.append("invalid_scope_guard_v1")
@@ -1031,6 +1389,12 @@ class GrpoCampaign:
         scout_sample_limit: int,
         confirm_improvement: float,
         keep_improvement: float,
+        target_improvement: float,
+        eval_prompt_profile: str,
+        eval_max_new_tokens: int,
+        sft_profile: str,
+        sft_baseline_manifest: Path | None = None,
+        stop_on_target: bool = True,
         search_space: str = DEFAULT_SEARCH_SPACE,
     ) -> None:
         self.root = root
@@ -1041,15 +1405,28 @@ class GrpoCampaign:
         self.scout_sample_limit = scout_sample_limit
         self.confirm_improvement = confirm_improvement
         self.keep_improvement = keep_improvement
+        self.target_improvement = target_improvement
+        self.eval_prompt_profile = eval_prompt_profile
+        self.eval_max_new_tokens = eval_max_new_tokens
+        self.sft_profile = sft_profile
+        self.sft_baseline_manifest = sft_baseline_manifest
+        self.stop_on_target = stop_on_target
         self.search_space = search_space
         self.campaign_dir = root / "research" / "campaigns" / tag
         self.profile_dir = self.campaign_dir / "profiles"
+        self.dataset_dir = self.campaign_dir / "datasets"
         self.log_path = self.campaign_dir / "experiment_log.jsonl"
         self.champion_path = self.campaign_dir / "champion.json"
+        self.sft_baseline_path = self.campaign_dir / "sft_baseline.json"
+        self.manifest_path = self.campaign_dir / "campaign_manifest.json"
         self.base_profile_payload = _load_yaml(self._resolve_profile_path(seed_profile))
         self.base_model_id = (
             base_model_id if base_model_id else str(_latest_completed_sft_checkpoint(root))
         )
+        if self.eval_prompt_profile not in {"stage", "compact", "full"}:
+            raise CampaignError("eval_prompt_profile must be one of: stage, compact, full")
+        if self.eval_max_new_tokens <= 0:
+            raise CampaignError("eval_max_new_tokens must be positive")
 
     def _resolve_profile_path(self, profile: str) -> Path:
         candidate = Path(profile)
@@ -1075,6 +1452,144 @@ class GrpoCampaign:
             "reward_weights": training.get("reward_weights", {}),
         }
 
+    def _write_campaign_manifest(self) -> None:
+        payload = {
+            "tag": self.tag,
+            "seed_profile": self.seed_profile,
+            "base_model_id": self.base_model_id,
+            "sft_profile": self.sft_profile,
+            "target_improvement": self.target_improvement,
+            "eval_prompt_profile": self.eval_prompt_profile,
+            "eval_max_new_tokens": self.eval_max_new_tokens,
+            "scout_sample_limit": self.scout_sample_limit,
+            "confirm_improvement": self.confirm_improvement,
+            "keep_improvement": self.keep_improvement,
+            "search_space": self.search_space,
+            "stop_on_target": self.stop_on_target,
+            "paths": {
+                "campaign_dir": str(self.campaign_dir),
+                "profiles": str(self.profile_dir),
+                "datasets": str(self.dataset_dir),
+                "experiment_log": str(self.log_path),
+                "champion": str(self.champion_path),
+                "sft_baseline": str(self.sft_baseline_path),
+            },
+        }
+        self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        self.manifest_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    def _load_or_eval_sft_baseline(self) -> dict[str, Any]:
+        if self.sft_baseline_path.exists():
+            return _load_json(self.sft_baseline_path)
+        if self.sft_baseline_manifest is not None:
+            manifest = _load_json(self.sft_baseline_manifest)
+            metrics = _metrics_from_eval_manifest(manifest)
+            payload = {
+                "timestamp": datetime.now().astimezone().isoformat(),
+                "source_manifest": str(self.sft_baseline_manifest),
+                "eval_run_id": Path(str(self.sft_baseline_manifest)).parent.name,
+                "score": score_metrics(metrics),
+                "metrics": metrics,
+            }
+            self.sft_baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            self.sft_baseline_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            return payload
+        self.logger.info(
+            "evaluating sft baseline profile=%s split=val prompt_profile=%s max_new_tokens=%s",
+            self.sft_profile,
+            self.eval_prompt_profile,
+            self.eval_max_new_tokens,
+        )
+        eval_dir = _new_run_from_command(
+            self.root,
+            "eval-sft-checkpoint",
+            [
+                sys.executable,
+                "-m",
+                "decomp_clarifier.cli",
+                "eval-sft-checkpoint",
+                "--training-profile",
+                self.sft_profile,
+                "--split",
+                "val",
+                "--prompt-profile",
+                self.eval_prompt_profile,
+                "--max-new-tokens",
+                str(self.eval_max_new_tokens),
+                "--no-thinking",
+            ],
+            self.logger,
+        )
+        manifest = _load_json(eval_dir / "checkpoint_eval_manifest.json")
+        metrics = _metrics_from_eval_manifest(manifest)
+        payload = {
+            "timestamp": datetime.now().astimezone().isoformat(),
+            "eval_run_id": eval_dir.name,
+            "score": score_metrics(metrics),
+            "metrics": metrics,
+            "manifest_path": str(eval_dir / "checkpoint_eval_manifest.json"),
+        }
+        self.sft_baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        self.sft_baseline_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return payload
+
+    def _dataset_path_for_experiment(
+        self,
+        *,
+        iteration: int,
+        experiment: CampaignExperiment,
+    ) -> tuple[Path, dict[str, Any]]:
+        if not experiment.dataset_overrides:
+            return self.root / "data" / "processed" / "rl" / "rl_records.jsonl", {}
+        prompt_mode = str(experiment.dataset_overrides.get("prompt_mode", "compact"))
+        raw_task_types = experiment.dataset_overrides.get("task_types", [])
+        task_types = (
+            [str(value) for value in raw_task_types]
+            if isinstance(raw_task_types, list)
+            else []
+        )
+        raw_limit = experiment.dataset_overrides.get("prompt_limit")
+        prompt_limit = raw_limit if isinstance(raw_limit, int) else None
+        samples = _load_function_samples(
+            self.root / "data" / "processed" / "sft" / "function_dataset.jsonl",
+            split="train",
+        )
+        records = pack_campaign_rl_records(
+            samples,
+            prompt_mode=prompt_mode,
+            task_types=task_types,
+            prompt_limit=prompt_limit,
+        )
+        if not records:
+            raise CampaignError(
+                f"campaign dataset for experiment={experiment.experiment_id!r} is empty"
+            )
+        dataset_path = self.dataset_dir / f"{iteration:04d}-{experiment.experiment_id}.jsonl"
+        _write_jsonl(dataset_path, records)
+        task_counts: Counter[str] = Counter(record.task_type for record in records)
+        metadata = {
+            "path": str(dataset_path),
+            "record_count": len(records),
+            "prompt_mode": prompt_mode,
+            "task_types": task_types,
+            "prompt_limit": prompt_limit,
+            "task_counts": dict(sorted(task_counts.items())),
+        }
+        (dataset_path.with_suffix(".manifest.json")).write_text(
+            json.dumps(metadata, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        return dataset_path, metadata
+
     def _load_entries(self) -> list[dict[str, Any]]:
         return _read_jsonl(self.log_path)
 
@@ -1092,10 +1607,20 @@ class GrpoCampaign:
         hypothesis: str,
         config_snapshot: Mapping[str, Any],
     ) -> None:
+        sft_baseline = self._load_or_eval_sft_baseline()
         payload = {
             "timestamp": datetime.now().astimezone().isoformat(),
             "profile_path": str(profile_path),
             "base_model_id": self.base_model_id,
+            "sft_baseline": {
+                "score": float(sft_baseline.get("score", 0.0)),
+                "metrics": {
+                    key: float(sft_baseline.get("metrics", {}).get(key, 0.0))
+                    for key in _SCORE_KEYS
+                },
+                "eval_run_id": sft_baseline.get("eval_run_id"),
+                "target_improvement": self.target_improvement,
+            },
             "scout_score": scout_score,
             "score": score,
             "train_run_id": train_run_id,
@@ -1109,9 +1634,14 @@ class GrpoCampaign:
             "metrics": {key: float(metrics.get(key, 0.0)) for key in _SCORE_KEYS},
         }
         self.champion_path.parent.mkdir(parents=True, exist_ok=True)
-        self.champion_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        self.champion_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
 
     def _bootstrap_baseline(self) -> None:
+        self._write_campaign_manifest()
+        self._load_or_eval_sft_baseline()
         if self.champion_path.exists():
             return
         self.logger.info(
@@ -1121,7 +1651,6 @@ class GrpoCampaign:
         )
         profile_path = self.profile_dir / _profile_file_name(0, "baseline")
         _write_yaml(profile_path, self.base_profile_payload)
-        eval_max_new_tokens = _profile_eval_max_new_tokens(self.base_profile_payload)
         train_dir = _new_run_from_command(
             self.root,
             "train-grpo",
@@ -1154,7 +1683,10 @@ class GrpoCampaign:
                 "--sample-limit",
                 str(self.scout_sample_limit),
                 "--max-new-tokens",
-                str(eval_max_new_tokens),
+                str(self.eval_max_new_tokens),
+                "--prompt-profile",
+                self.eval_prompt_profile,
+                "--no-thinking",
             ],
             self.logger,
         )
@@ -1173,14 +1705,22 @@ class GrpoCampaign:
                 "--split",
                 "val",
                 "--max-new-tokens",
-                str(eval_max_new_tokens),
+                str(self.eval_max_new_tokens),
+                "--prompt-profile",
+                self.eval_prompt_profile,
+                "--no-thinking",
             ],
             self.logger,
         )
-        scout_metrics = _metrics_from_eval_manifest(_load_json(scout_dir / "checkpoint_eval_manifest.json"))
+        scout_metrics = _metrics_from_eval_manifest(
+            _load_json(scout_dir / "checkpoint_eval_manifest.json")
+        )
         scout_score = score_metrics(scout_metrics)
-        metrics = _metrics_from_eval_manifest(_load_json(confirm_dir / "checkpoint_eval_manifest.json"))
+        metrics = _metrics_from_eval_manifest(
+            _load_json(confirm_dir / "checkpoint_eval_manifest.json")
+        )
         score = score_metrics(metrics)
+        sft_baseline = self._load_or_eval_sft_baseline()
         self._write_champion(
             profile_path=profile_path,
             scout_metrics=scout_metrics,
@@ -1207,6 +1747,8 @@ class GrpoCampaign:
                 "confirm_eval_run_id": confirm_dir.name,
                 "scout_score": scout_score,
                 "confirm_score": score,
+                "sft_score": float(sft_baseline.get("score", 0.0)),
+                "target_improvement": self.target_improvement,
                 "metrics": metrics,
                 "config_snapshot": self._profile_snapshot(self.base_profile_payload),
                 "notes": "Campaign baseline established from the seed profile.",
@@ -1230,10 +1772,15 @@ class GrpoCampaign:
 
     def run(self) -> None:
         dataset_path = self.root / "data" / "processed" / "rl" / "rl_records.jsonl"
+        function_dataset_path = self.root / "data" / "processed" / "sft" / "function_dataset.jsonl"
         if sys.platform != "win32":
             raise CampaignError("GRPO campaign requires Windows")
         if not dataset_path.exists():
             raise CampaignError("missing RL dataset at data/processed/rl/rl_records.jsonl")
+        if not function_dataset_path.exists():
+            raise CampaignError(
+                "missing function dataset at data/processed/sft/function_dataset.jsonl"
+            )
         load_dotenv(self.root)
         self._bootstrap_baseline()
 
@@ -1249,9 +1796,35 @@ class GrpoCampaign:
                 for key in _SCORE_KEYS
             }
             champion_scout_metrics = {
-                key: float(champion.get("scout_metrics", {}).get(key, champion_metrics.get(key, 0.0)))
+                key: float(
+                    champion.get("scout_metrics", {}).get(
+                        key,
+                        champion_metrics.get(key, 0.0),
+                    )
+                )
                 for key in _SCORE_KEYS
             }
+            sft_baseline = self._load_or_eval_sft_baseline()
+            sft_metrics = {
+                key: float(sft_baseline.get("metrics", {}).get(key, 0.0))
+                for key in _SCORE_KEYS
+            }
+            sft_score = float(sft_baseline.get("score", 0.0))
+            champion_score = float(champion.get("score", 0.0))
+            if self.stop_on_target and sft_target_passed(
+                champion_metrics,
+                candidate_score=champion_score,
+                sft_metrics=sft_metrics,
+                sft_score=sft_score,
+                target_improvement=self.target_improvement,
+            ):
+                self.logger.info(
+                    "campaign target reached champion_score=%.4f sft_score=%.4f target_delta=%.4f",
+                    champion_score,
+                    sft_score,
+                    self.target_improvement,
+                )
+                return
             latest_eval_dir = (
                 self.root / "artifacts" / "runs" / champion["eval_run_id"]
                 if champion.get("eval_run_id")
@@ -1285,7 +1858,6 @@ class GrpoCampaign:
                 champion_profile_payload=champion_profile_payload,
             )
             candidate_profile_payload = _load_yaml(profile_path)
-            eval_max_new_tokens = _profile_eval_max_new_tokens(candidate_profile_payload)
             self.logger.info(
                 "iteration=%s experiment=%s hypothesis=%s",
                 iteration,
@@ -1298,11 +1870,20 @@ class GrpoCampaign:
             train_dir: Path | None = None
             scout_dir: Path | None = None
             confirm_dir: Path | None = None
+            candidate_dataset_path: Path | None = None
+            candidate_dataset_metadata: dict[str, Any] = {}
             scout_score: float | None = None
             confirm_score: float | None = None
             scout_metrics: dict[str, float] = dict.fromkeys(_SCORE_KEYS, 0.0)
             confirm_metrics: dict[str, float] = dict.fromkeys(_SCORE_KEYS, 0.0)
             try:
+                (
+                    candidate_dataset_path,
+                    candidate_dataset_metadata,
+                ) = self._dataset_path_for_experiment(
+                    iteration=iteration,
+                    experiment=experiment,
+                )
                 train_dir = _new_run_from_command(
                     self.root,
                     "train-grpo",
@@ -1315,6 +1896,8 @@ class GrpoCampaign:
                         str(profile_path.relative_to(self.root)),
                         "--base-model-id",
                         self.base_model_id,
+                        "--dataset-path",
+                        str(candidate_dataset_path.relative_to(self.root)),
                     ],
                     self.logger,
                 )
@@ -1335,7 +1918,10 @@ class GrpoCampaign:
                         "--sample-limit",
                         str(self.scout_sample_limit),
                         "--max-new-tokens",
-                        str(eval_max_new_tokens),
+                        str(self.eval_max_new_tokens),
+                        "--prompt-profile",
+                        self.eval_prompt_profile,
+                        "--no-thinking",
                     ],
                     self.logger,
                 )
@@ -1347,7 +1933,9 @@ class GrpoCampaign:
                 champion_scout_score = float(champion.get("scout_score", champion_score))
                 if not _hard_keep_gates_pass(scout_metrics, champion_scout_metrics):
                     status = "discard"
-                    notes = "Scout evaluation failed the scout hard keep gates against the champion."
+                    notes = (
+                        "Scout evaluation failed the scout hard keep gates against the champion."
+                    )
                 elif scout_score < champion_scout_score + self.keep_improvement:
                     status = "discard"
                     notes = "Scout score did not clear the scout promotion threshold."
@@ -1367,7 +1955,10 @@ class GrpoCampaign:
                             "--split",
                             "val",
                             "--max-new-tokens",
-                            str(eval_max_new_tokens),
+                            str(self.eval_max_new_tokens),
+                            "--prompt-profile",
+                            self.eval_prompt_profile,
+                            "--no-thinking",
                         ],
                         self.logger,
                     )
@@ -1375,12 +1966,26 @@ class GrpoCampaign:
                         _load_json(confirm_dir / "checkpoint_eval_manifest.json")
                     )
                     confirm_score = score_metrics(confirm_metrics)
+                    target_passed = sft_target_passed(
+                        confirm_metrics,
+                        candidate_score=confirm_score,
+                        sft_metrics=sft_metrics,
+                        sft_score=sft_score,
+                        target_improvement=self.target_improvement,
+                    )
                     if (
                         _hard_keep_gates_pass(confirm_metrics, champion_metrics)
-                        and confirm_score >= champion_score + self.confirm_improvement
+                        and (
+                            confirm_score >= champion_score + self.confirm_improvement
+                            or target_passed
+                        )
                     ):
-                        status = "keep"
-                        notes = "Full validation beat the champion and cleared all hard gates."
+                        status = "target_keep" if target_passed else "keep"
+                        notes = (
+                            "Full validation reached the SFT target and cleared all hard gates."
+                            if target_passed
+                            else "Full validation beat the champion and cleared all hard gates."
+                        )
                         self._write_champion(
                             profile_path=profile_path,
                             scout_metrics=scout_metrics,
@@ -1410,11 +2015,15 @@ class GrpoCampaign:
                     "experiment_id": experiment.experiment_id,
                     "hypothesis": experiment.hypothesis,
                     "profile_path": str(profile_path),
+                    "dataset_path": str(candidate_dataset_path) if candidate_dataset_path else None,
+                    "dataset": candidate_dataset_metadata,
                     "train_run_id": train_dir.name if train_dir else None,
                     "scout_eval_run_id": scout_dir.name if scout_dir else None,
                     "confirm_eval_run_id": confirm_dir.name if confirm_dir else None,
                     "scout_score": scout_score,
                     "confirm_score": confirm_score,
+                    "sft_score": sft_score,
+                    "target_improvement": self.target_improvement,
                     "metrics": confirm_metrics if confirm_dir is not None else scout_metrics,
                     "config_snapshot": self._profile_snapshot(candidate_profile_payload),
                     "notes": notes,
@@ -1440,6 +2049,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scout-sample-limit", type=int, default=DEFAULT_SCOUT_SAMPLE_LIMIT)
     parser.add_argument("--confirm-improvement", type=float, default=DEFAULT_CONFIRM_IMPROVEMENT)
     parser.add_argument("--keep-improvement", type=float, default=DEFAULT_KEEP_IMPROVEMENT)
+    parser.add_argument("--target-improvement", type=float, default=DEFAULT_TARGET_IMPROVEMENT)
+    parser.add_argument("--sft-profile", type=str, default="sft_qwen35_2b")
+    parser.add_argument("--sft-baseline-manifest", type=Path, default=None)
+    parser.add_argument(
+        "--eval-prompt-profile",
+        choices=("stage", "compact", "full"),
+        default=DEFAULT_EVAL_PROMPT_PROFILE,
+    )
+    parser.add_argument("--eval-max-new-tokens", type=int, default=DEFAULT_EVAL_MAX_NEW_TOKENS)
+    parser.add_argument("--no-stop-on-target", action="store_true")
     parser.add_argument(
         "--search-space",
         choices=("default", "long300"),
@@ -1463,6 +2082,12 @@ def main(argv: list[str] | None = None) -> int:
             scout_sample_limit=args.scout_sample_limit,
             confirm_improvement=args.confirm_improvement,
             keep_improvement=args.keep_improvement,
+            target_improvement=args.target_improvement,
+            eval_prompt_profile=args.eval_prompt_profile,
+            eval_max_new_tokens=args.eval_max_new_tokens,
+            sft_profile=args.sft_profile,
+            sft_baseline_manifest=args.sft_baseline_manifest,
+            stop_on_target=not args.no_stop_on_target,
             search_space=args.search_space,
         )
         campaign.run()

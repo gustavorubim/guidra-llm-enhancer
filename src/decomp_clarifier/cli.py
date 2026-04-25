@@ -1112,6 +1112,13 @@ def train_grpo(
             "GRPO starting point. Overrides the profile's base_model_id/source_training_profile."
         ),
     ),
+    dataset_path: Path | None = typer.Option(  # noqa: B008
+        None,
+        help=(
+            "Optional packed RL JSONL dataset path. Defaults to "
+            "data/processed/rl/rl_records.jsonl."
+        ),
+    ),
     allow_raw_base: bool = typer.Option(
         False,
         "--allow-raw-base",
@@ -1142,24 +1149,30 @@ def train_grpo(
         training_profile=training_profile,
         allow_raw_base=allow_raw_base,
     )
+    resolved_dataset_path = (
+        paths.resolve(dataset_path)
+        if dataset_path is not None
+        else paths.processed_rl_dir / "rl_records.jsonl"
+    )
     _write_resolved(
         run_dir / "resolved_config.yaml",
         {
             "app": app_config.model_dump(mode="python"),
             "training_profile": training_profile,
             "training": training_config.model_dump(mode="python"),
+            "dataset_path": str(resolved_dataset_path),
         },
     )
     logger.info(
         "starting train-grpo run_id=%s profile=%s dataset=%s output_dir=%s base_model=%s",
         run_id,
         training_profile,
-        paths.processed_rl_dir / "rl_records.jsonl",
+        resolved_dataset_path,
         run_dir / "model",
         resolved_base_model,
     )
     manifest = _run_grpo_training(
-        paths.processed_rl_dir / "rl_records.jsonl", run_dir / "model", training_config
+        resolved_dataset_path, run_dir / "model", training_config
     )
     logger.info("completed train-grpo manifest=%s", manifest)
     typer.echo(str(manifest))
@@ -1176,7 +1189,15 @@ def eval_sft_checkpoint(
     temperature: float = typer.Option(0.0),
     prompt_profile: str = typer.Option(
         "stage",
-        help="Prompt formatter for checkpoint eval: stage, compact, or full.",
+        help=(
+            "Prompt formatter for checkpoint eval: stage, compact, full, "
+            "context_plus, or context_plus_strict."
+        ),
+    ),
+    thinking: bool = typer.Option(
+        False,
+        "--thinking/--no-thinking",
+        help="Enable the checkpoint chat template thinking path during generation.",
     ),
     app_profile: str = typer.Option("default"),
 ) -> None:
@@ -1212,6 +1233,7 @@ def eval_sft_checkpoint(
         max_new_tokens=max_new_tokens,
         temperature=temperature,
         prompt_profile=prompt_profile,
+        enable_thinking=thinking,
     )
     _write_resolved(
         run_dir / "resolved_config.yaml",
@@ -1226,6 +1248,7 @@ def eval_sft_checkpoint(
             "max_new_tokens": max_new_tokens,
             "temperature": temperature,
             "prompt_profile": prompt_profile,
+            "enable_thinking": thinking,
         },
     )
     logger.info("completed eval-sft-checkpoint manifest=%s", artifacts.manifest_path)
@@ -1243,7 +1266,15 @@ def eval_grpo_checkpoint(
     temperature: float = typer.Option(0.0),
     prompt_profile: str = typer.Option(
         "stage",
-        help="Prompt formatter for checkpoint eval: stage, compact, or full.",
+        help=(
+            "Prompt formatter for checkpoint eval: stage, compact, full, "
+            "context_plus, or context_plus_strict."
+        ),
+    ),
+    thinking: bool = typer.Option(
+        False,
+        "--thinking/--no-thinking",
+        help="Enable the checkpoint chat template thinking path during generation.",
     ),
     app_profile: str = typer.Option("default"),
 ) -> None:
@@ -1279,6 +1310,7 @@ def eval_grpo_checkpoint(
         max_new_tokens=max_new_tokens,
         temperature=temperature,
         prompt_profile=prompt_profile,
+        enable_thinking=thinking,
     )
     _write_resolved(
         run_dir / "resolved_config.yaml",
@@ -1293,6 +1325,7 @@ def eval_grpo_checkpoint(
             "max_new_tokens": max_new_tokens,
             "temperature": temperature,
             "prompt_profile": prompt_profile,
+            "enable_thinking": thinking,
         },
     )
     logger.info("completed eval-grpo-checkpoint manifest=%s", artifacts.manifest_path)

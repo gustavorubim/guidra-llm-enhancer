@@ -9,7 +9,12 @@ from pathlib import Path
 
 import yaml
 
-from decomp_clarifier.dataset.prompt_formatter import format_prompt, format_rl_prompt
+from decomp_clarifier.dataset.prompt_formatter import (
+    format_context_plus_prompt,
+    format_context_plus_strict_prompt,
+    format_prompt,
+    format_rl_prompt,
+)
 from decomp_clarifier.evaluation.readability_eval import readability_improvement
 from decomp_clarifier.evaluation.report_builder import (
     build_report,
@@ -216,7 +221,14 @@ def resolve_checkpoint_prompt_formatter(stage: str, prompt_profile: str) -> Prom
         return format_rl_prompt
     if prompt_profile == "full":
         return format_prompt
-    raise ValueError("prompt_profile must be one of: stage, compact, full")
+    if prompt_profile == "context_plus":
+        return format_context_plus_prompt
+    if prompt_profile == "context_plus_strict":
+        return format_context_plus_strict_prompt
+    raise ValueError(
+        "prompt_profile must be one of: stage, compact, full, "
+        "context_plus, context_plus_strict"
+    )
 
 
 def evaluate_prediction_records(
@@ -522,6 +534,7 @@ def run_checkpoint_evaluation(
     max_new_tokens: int,
     temperature: float,
     prompt_profile: str = "stage",
+    enable_thinking: bool = False,
 ) -> CheckpointEvalArtifacts:
     checkpoint_dir = normalize_checkpoint_dir(checkpoint_dir)
     config = load_checkpoint_training_config(root, checkpoint_dir, training_profile)
@@ -544,17 +557,19 @@ def run_checkpoint_evaluation(
     if logger is not None:
         logger.info(
             "loading predictor stage=%s checkpoint=%s prompt_profile=%s "
-            "max_new_tokens=%s temperature=%s",
+            "max_new_tokens=%s temperature=%s enable_thinking=%s",
             stage,
             checkpoint_dir,
             prompt_profile,
             max_new_tokens,
             temperature,
+            enable_thinking,
         )
     predictor = CheckpointPredictor(
         checkpoint_dir,
         config,
         prompt_formatter=prompt_formatter,
+        enable_thinking=enable_thinking,
     )
     system = f"{stage}_checkpoint"
     prediction_interval = _progress_interval(len(samples))
@@ -701,6 +716,7 @@ def run_checkpoint_evaluation(
                 "sample_count": len(samples),
                 "training_profile": training_profile,
                 "prompt_profile": prompt_profile,
+                "enable_thinking": enable_thinking,
                 "max_new_tokens": max_new_tokens,
                 "temperature": temperature,
                 "metrics": report.metrics,

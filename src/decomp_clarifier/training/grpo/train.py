@@ -262,6 +262,7 @@ def compute_completion_reward_details(
             min_completion_ratio=min_completion_ratio,
             max_completion_ratio=max_completion_ratio,
             max_function_count=max_function_count,
+            compile_reference_source=compile_reference_source,
         )
     except Exception:  # noqa: BLE001
         return empty_reward_breakdown()

@@ -64,13 +64,20 @@ def _prepare_generation_prompt(
     tokenizer_or_processor: Any,
     text_tokenizer: Any,
     prompt: str,
+    *,
+    enable_thinking: bool = False,
 ) -> Any:
     if hasattr(text_tokenizer, "apply_chat_template"):
         try:
+            kwargs: dict[str, Any] = {
+                "tokenize": False,
+                "add_generation_prompt": True,
+            }
+            if enable_thinking:
+                kwargs["enable_thinking"] = True
             rendered_prompt = text_tokenizer.apply_chat_template(
                 [{"role": "user", "content": prompt}],
-                tokenize=False,
-                add_generation_prompt=True,
+                **kwargs,
             )
             return _encode_prompt(text_tokenizer, rendered_prompt)
         except Exception:  # noqa: BLE001 - fall back to raw prompt on tokenizer/template mismatch
@@ -85,6 +92,7 @@ class CheckpointPredictor:
         config: TrainingConfig,
         *,
         prompt_formatter: Callable[[FunctionDatasetSample], str] = format_prompt,
+        enable_thinking: bool = False,
     ) -> None:
         ensure_windows_cuda()
         prepare_model_runtime_environment()
@@ -100,6 +108,7 @@ class CheckpointPredictor:
         self.checkpoint_dir = local_dir if local_dir is not None else Path(str(checkpoint_dir))
         self.model_source = str(local_dir if local_dir is not None else checkpoint_dir)
         self.prompt_formatter = prompt_formatter
+        self.enable_thinking = enable_thinking
         max_seq_length = config.training.max_seq_length or 512
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.model_source,
@@ -112,16 +121,20 @@ class CheckpointPredictor:
             self.text_tokenizer.pad_token = self.text_tokenizer.eos_token
         self.model.eval()
 
-    def predict(
+    def generate_text(
         self,
-        sample: FunctionDatasetSample,
+        prompt: str,
         *,
-        system: str,
         max_new_tokens: int,
         temperature: float,
-    ) -> PredictionRecord:
-        prompt = f"{self.prompt_formatter(sample)}\n\n"
-        inputs = _prepare_generation_prompt(self.tokenizer, self.text_tokenizer, prompt)
+    ) -> str:
+        prompt = f"{prompt}\n\n"
+        inputs = _prepare_generation_prompt(
+            self.tokenizer,
+            self.text_tokenizer,
+            prompt,
+            enable_thinking=self.enable_thinking,
+        )
         inputs = {name: value.to("cuda:0") for name, value in inputs.items()}
 
         generation_kwargs: dict[str, Any] = {
@@ -142,8 +155,25 @@ class CheckpointPredictor:
 
         prompt_length = int(inputs["input_ids"].shape[1])
         generated_ids = output_ids[0][prompt_length:]
-        raw_text = self.text_tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
-        output, json_valid = normalize_output_with_status(raw_text)
+        return self.text_tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+
+    def predict(
+        self,
+        sample: FunctionDatasetSample,
+        *,
+        system: str,
+        max_new_tokens: int,
+        temperature: float,
+    ) -> PredictionRecord:
+        raw_text = self.generate_text(
+            self.prompt_formatter(sample),
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+        output, json_valid = normalize_output_with_status(
+            raw_text,
+            strip_thinking=self.enable_thinking,
+        )
         return PredictionRecord(
             sample_id=sample.sample_id,
             system=system,

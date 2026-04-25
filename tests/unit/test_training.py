@@ -45,6 +45,8 @@ from decomp_clarifier.training.grpo.rewards import (
     safety_gate_factor,
     signature_reward,
     truncation_penalty,
+    unknown_constant_penalty,
+    unsupported_bool_penalty,
     weighted_reward,
 )
 from decomp_clarifier.training.grpo.train import (
@@ -417,6 +419,56 @@ def test_training_utilities_and_rewards(
         cleaned_c="int helper(void) { foo(); bar(); baz(); qux(); return 0; }",
     )
     assert hallucination_penalty(hallucinating_output, ["puts"], []) == 1.0
+    known_constant_output = ClarifiedFunctionOutput(
+        summary="Uses known constants.",
+        confidence=0.9,
+        renamings={},
+        cleaned_c="int helper(char *dst, char *src) { return copy(dst, src, MAX_VAL); }",
+    )
+    max_val_reference = "int helper(char *dst, char *src) { return copy(dst, src, MAX_VAL); }"
+    assert (
+        unknown_constant_penalty(
+            known_constant_output,
+            raw_code=max_val_reference,
+            target_clean_code=max_val_reference,
+        )
+        == 0.0
+    )
+    invented_constant_output = ClarifiedFunctionOutput(
+        summary="Invents a similar constant.",
+        confidence=0.9,
+        renamings={},
+        cleaned_c="int helper(char *dst, char *src) { return copy(dst, src, MAX_VALUE); }",
+    )
+    assert (
+        unknown_constant_penalty(
+            invented_constant_output,
+            raw_code=max_val_reference,
+            target_clean_code=max_val_reference,
+        )
+        > 0.0
+    )
+    bool_output = ClarifiedFunctionOutput(
+        summary="Uses a boolean flag.",
+        confidence=0.9,
+        renamings={},
+        cleaned_c="int helper(const char *s) { bool seen = false; return seen; }",
+    )
+    assert (
+        unsupported_bool_penalty(
+            bool_output,
+            target_clean_code="int helper(const char *s) { int seen = 0; return seen; }",
+        )
+        == 1.0
+    )
+    assert (
+        unsupported_bool_penalty(
+            bool_output,
+            target_clean_code="int helper(const char *s) { int seen = 0; return seen; }",
+            compile_reference_source="#include <stdbool.h>\n",
+        )
+        == 0.0
+    )
     assert (
         overshoot_penalty("int helper(void) { return 0; }", "int helper(void) { return 0; }")
         == 0.0

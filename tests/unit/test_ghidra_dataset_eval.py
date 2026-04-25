@@ -40,13 +40,22 @@ from decomp_clarifier.ghidra_export.parse_exports import (
     ParsedGhidraProject,
     parse_ghidra_export_dir,
 )
+from decomp_clarifier.inference.agentic_repair import (
+    agentic_prompt,
+    build_repair_prompt,
+    validate_agentic_answer,
+)
 from decomp_clarifier.inference.checkpoint_predictor import (
     _encode_prompt,
     _prepare_generation_prompt,
     _text_tokenizer,
 )
 from decomp_clarifier.inference.explain import summarize_improvements
-from decomp_clarifier.inference.formatter import normalize_output, normalize_output_with_status
+from decomp_clarifier.inference.formatter import (
+    normalize_output,
+    normalize_output_with_status,
+    strip_thinking_prefix,
+)
 from decomp_clarifier.inference.runner import InferenceRunner
 from decomp_clarifier.logging import configure_logging
 from decomp_clarifier.schemas.compiler import BinaryArtifact, CompileManifest
@@ -218,6 +227,18 @@ def test_baselines_inference_and_evaluation(sample_dataset_samples, tmp_path: Pa
     assert not json_valid
     assert fallback_output.cleaned_c == "{not valid json"
     assert fallback_output.summary == ""
+    thinking_text = (
+        "check the function first\n</think>\n\n"
+        '{"summary":"ok","confidence":1.0,"renamings":{},"cleaned_c":"int x(void){return 1;}"}'
+    )
+    thinking_output, thinking_json_valid = normalize_output_with_status(
+        thinking_text,
+        strip_thinking=True,
+    )
+    assert thinking_json_valid
+    assert thinking_output.summary == "ok"
+    assert not normalize_output_with_status(thinking_text)[1]
+    assert strip_thinking_prefix(thinking_text).startswith('{"summary":"ok"')
     runner = InferenceRunner(lambda _sample: output)
     assert runner.run([sample])[0].summary == "ok"
     assert summarize_improvements(sample, renamed)
@@ -458,6 +479,55 @@ def test_checkpoint_prompt_encoding_supports_processor_and_tokenizer() -> None:
     assert _prepare_generation_prompt(chat_tokenizer, chat_tokenizer, "hello") == {
         "input_ids": "<chat>hello</chat>"
     }
+
+    class FakeThinkingChatTokenizer(FakeTokenizer):
+        def apply_chat_template(
+            self,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        ):
+            assert tokenize is False
+            assert add_generation_prompt is True
+            assert messages == [{"role": "user", "content": "hello"}]
+            assert enable_thinking is True
+            return "<chat><think>hello"
+
+    thinking_tokenizer = FakeThinkingChatTokenizer()
+    assert _prepare_generation_prompt(
+        thinking_tokenizer,
+        thinking_tokenizer,
+        "hello",
+        enable_thinking=True,
+    ) == {"input_ids": "<chat><think>hello"}
+
+
+def test_agentic_repair_helpers_build_feedback(sample_dataset_samples) -> None:
+    sample = sample_dataset_samples[0]
+    thinking_prompt = agentic_prompt(format_prompt(sample), enable_thinking=True)
+    assert "final answer after </think>" in thinking_prompt
+    assert "or <think> blocks" not in thinking_prompt
+
+    output, json_valid, verification, feedback = validate_agentic_answer(
+        sample,
+        "reasoning</think>\n{not valid json",
+        strip_thinking=True,
+    )
+    assert not json_valid
+    assert not verification.field_complete
+    assert output.cleaned_c == "{not valid json"
+    assert "strict JSON" in feedback[0]
+
+    repair_prompt = build_repair_prompt(
+        original_prompt="Original task",
+        previous_answer="bad answer",
+        feedback=["compile failed", "behavior failed"],
+        attempt_index=1,
+    )
+    assert "Tool feedback:" in repair_prompt
+    assert "- compile failed" in repair_prompt
+    assert "<answer>\nbad answer\n</answer>" in repair_prompt
 
 
 def test_rl_prompt_is_compact_relative_to_sft_prompt(sample_dataset_samples) -> None:
