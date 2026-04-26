@@ -22,12 +22,6 @@ from decomp_clarifier.settings import load_app_config  # noqa: E402
 SUMMARY_PROFILE_COLUMNS = [
     "sft_qwen35_2b",
     "grpo_qwen35_2b_champion_300",
-    "sft_gemma4_e2b_it",
-    "grpo_gemma4_e2b_it",
-    "sft_qwen35_4b",
-    "grpo_qwen35_4b",
-    "sft_gemma4_e4b_it",
-    "grpo_gemma4_e4b_it",
 ]
 
 
@@ -65,7 +59,8 @@ def _build_summary_payload(manifests_by_profile: dict[str, dict[str, object]]) -
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "columns": columns,
         "eval_manifests": {
-            profile: manifest.get("__manifest_path", "") for profile, manifest in manifests_by_profile.items()
+            profile: manifest.get("__manifest_path", "")
+            for profile, manifest in manifests_by_profile.items()
         },
         "systems": systems,
         "table_markdown": render_target_comparison_table(systems, columns=columns),
@@ -95,10 +90,22 @@ def main() -> None:
     target_markdown_path = paths.reports_dir / "target_comparison_table.md"
     target_json_path = paths.reports_dir / "target_comparison_table.json"
 
-    matrix_markdown_path.write_text(summary_payload["table_markdown"] + "\n", encoding="utf-8")
-    matrix_json_path.write_text(json.dumps(summary_payload, indent=2, sort_keys=True), encoding="utf-8")
-    target_markdown_path.write_text(summary_payload["table_markdown"] + "\n", encoding="utf-8")
-    target_json_path.write_text(json.dumps(summary_payload, indent=2, sort_keys=True), encoding="utf-8")
+    matrix_markdown_path.write_text(
+        summary_payload["table_markdown"] + "\n",
+        encoding="utf-8",
+    )
+    matrix_json_path.write_text(
+        json.dumps(summary_payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    target_markdown_path.write_text(
+        summary_payload["table_markdown"] + "\n",
+        encoding="utf-8",
+    )
+    target_json_path.write_text(
+        json.dumps(summary_payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
     print(f"Model matrix markdown: {matrix_markdown_path}")
     print(f"Model matrix json: {matrix_json_path}")

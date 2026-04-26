@@ -180,15 +180,16 @@ Current SFT defaults in `configs/training/sft_qwen35_2b.yaml`:
 | Gradient accumulation | `4` |
 | Epochs | `1` |
 
-Canonical training profiles now include `sft_qwen35_2b`, `sft_qwen35_4b`, `sft_gemma4_e2b_it`, `sft_gemma4_e4b_it` plus matching `grpo_*` profiles.
+The active training setup is now the Qwen SFT source profile, `sft_qwen35_2b`, plus the champion GRPO profile, `grpo_qwen35_2b_champion_300`.
 
-To run the full model matrix end to end:
+To train or evaluate the active GRPO setup:
 
 ```powershell
-.\scripts\run_training_matrix.ps1
+.\scripts\train_grpo.ps1
+.\scripts\eval_grpo_checkpoint.ps1 -CheckpointDir <path-to-champion-checkpoint>
 ```
 
-That orchestration script trains all four SFT profiles, all four GRPO profiles, evaluates all eight checkpoints, and refreshes both `artifacts/reports/model_matrix_summary.*` and `artifacts/reports/target_comparison_table.*`.
+Older GRPO profiles, alternate SFT model profiles, ablation runners, campaign logs, and matrix orchestration scripts are retained for auditability under `configs/training/legacy/`, `scripts/legacy/experiments/`, and `research/legacy/`.
 
 What is not wired yet:
 

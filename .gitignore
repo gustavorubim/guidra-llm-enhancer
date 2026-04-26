@@ -17,6 +17,7 @@ data/interim/
 data/processed/
 data/raw/
 research/campaigns/
+research/legacy/campaigns/
 *.egg-info/
 *.pyc
 unsloth_compiled_cache/

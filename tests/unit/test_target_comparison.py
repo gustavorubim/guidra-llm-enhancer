@@ -166,12 +166,12 @@ def test_build_target_comparison_systems_from_manifests_supports_matrix_columns(
             "metrics": {"json_valid_rate": 0.91, "readability_score": 0.80},
             "baseline_metrics": baseline_metrics,
         },
-        "grpo_qwen35_2b": {
+        "grpo_qwen35_2b_champion_300": {
             "stage": "grpo",
             "metrics": {"json_valid_rate": 0.89, "readability_score": 0.82},
             "baseline_metrics": baseline_metrics,
         },
-        "sft_gemma4_e2b_it": {
+        "sft_aux_profile": {
             "stage": "sft",
             "metrics": {"json_valid_rate": 0.87, "readability_score": 0.78},
             "baseline_metrics": baseline_metrics,
@@ -183,19 +183,19 @@ def test_build_target_comparison_systems_from_manifests_supports_matrix_columns(
         "raw_ghidra",
         "prompt_only_cleanup",
         "sft_qwen35_2b",
-        "grpo_qwen35_2b",
-        "sft_gemma4_e2b_it",
+        "grpo_qwen35_2b_champion_300",
+        "sft_aux_profile",
     ]
     table = render_target_comparison_table(systems, columns=columns)
 
     assert list(systems)[:2] == ["raw_ghidra", "naming_only"]
     assert systems["sft_qwen35_2b"]["json_valid_rate"] == pytest.approx(0.91)
     assert systems["prompt_only_cleanup"]["readability_score"] == pytest.approx(0.72)
-    assert (
-        table.splitlines()[0]
-        == "| Metric | raw_ghidra | prompt_only_cleanup | sft_qwen35_2b | grpo_qwen35_2b | "
-        "sft_gemma4_e2b_it |"
+    expected_header = (
+        "| Metric | raw_ghidra | prompt_only_cleanup | sft_qwen35_2b | "
+        "grpo_qwen35_2b_champion_300 | sft_aux_profile |"
     )
+    assert table.splitlines()[0] == expected_header
 
 
 def test_build_target_comparison_systems_rejects_conflicting_baselines() -> None:

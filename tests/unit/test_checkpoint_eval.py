@@ -20,9 +20,9 @@ def test_find_latest_completed_checkpoint_filters_by_training_profile(temp_paths
     second_run = temp_paths.run_dir("train-sft-20260415-020000")
     third_run = temp_paths.run_dir("train-sft-20260415-030000")
     for run_dir, profile in (
-        (first_run, "sft_qwen35_2b_12gb"),
-        (second_run, "sft_qwen35_4b_12gb"),
-        (third_run, "sft_qwen35_4b_12gb_1000"),
+        (first_run, "sft_candidate_a"),
+        (second_run, "sft_candidate_b"),
+        (third_run, "sft_candidate_c"),
     ):
         model_dir = run_dir / "model"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -35,7 +35,7 @@ def test_find_latest_completed_checkpoint_filters_by_training_profile(temp_paths
     assert find_latest_completed_checkpoint(
         temp_paths,
         "sft",
-        training_profile="sft_qwen35_4b_12gb_1000",
+        training_profile="sft_candidate_c",
     ) == third_run / "model"
 
 
@@ -67,7 +67,7 @@ def test_find_latest_completed_checkpoint_rejects_ambiguous_unlabeled_profiles(t
         find_latest_completed_checkpoint(
             temp_paths,
             "grpo",
-            training_profile="grpo_qwen35_4b_12gb_1000",
+            training_profile="grpo_candidate_c",
         )
 
 

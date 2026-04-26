@@ -339,14 +339,14 @@ def test_resolve_grpo_base_model_blocks_raw_override_for_sft_profile(temp_paths)
         cli_module._resolve_grpo_base_model(
             temp_paths,
             config,
-            training_profile="grpo_qwen35_2b_gdpo_300",
+            training_profile="grpo_qwen35_2b_champion_300",
         )
 
     assert (
         cli_module._resolve_grpo_base_model(
             temp_paths,
             config,
-            training_profile="grpo_qwen35_2b_gdpo_300",
+            training_profile="grpo_qwen35_2b_champion_300",
             allow_raw_base=True,
         )
         == "Qwen/Qwen3.5-2B"
@@ -370,7 +370,7 @@ def test_resolve_grpo_base_model_accepts_sft_checkpoint_override(temp_paths) -> 
         cli_module._resolve_grpo_base_model(
             temp_paths,
             config,
-            training_profile="grpo_qwen35_2b_gdpo_300",
+            training_profile="grpo_qwen35_2b_champion_300",
         )
         == str(checkpoint_dir)
     )
