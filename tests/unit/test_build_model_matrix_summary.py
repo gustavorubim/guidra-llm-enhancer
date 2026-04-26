@@ -23,7 +23,7 @@ def test_build_summary_payload_uses_expected_columns_and_manifest_map() -> None:
                 "__manifest_path": "artifacts/runs/eval-sft-2b/checkpoint_eval_manifest.json",
                 "metrics": {"json_valid_rate": 0.75},
             },
-            "grpo_qwen35_2b": {
+            "grpo_qwen35_2b_champion_300": {
                 "__manifest_path": "artifacts/runs/eval-grpo-2b/checkpoint_eval_manifest.json",
                 "metrics": {"json_valid_rate": 0.8},
             },
@@ -33,5 +33,7 @@ def test_build_summary_payload_uses_expected_columns_and_manifest_map() -> None:
     assert payload["columns"][: len(module.BASELINE_COLUMNS)] == module.BASELINE_COLUMNS
     assert payload["columns"][len(module.BASELINE_COLUMNS) :] == module.SUMMARY_PROFILE_COLUMNS
     assert payload["eval_manifests"]["sft_qwen35_2b"].endswith("checkpoint_eval_manifest.json")
-    assert payload["eval_manifests"]["grpo_qwen35_2b"].endswith("checkpoint_eval_manifest.json")
+    assert payload["eval_manifests"]["grpo_qwen35_2b_champion_300"].endswith(
+        "checkpoint_eval_manifest.json"
+    )
     assert "| Metric |" in payload["table_markdown"]

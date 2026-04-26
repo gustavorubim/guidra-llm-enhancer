@@ -356,6 +356,8 @@ def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
         ["git", *args],
         cwd=root,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         check=check,
     )
@@ -467,6 +469,8 @@ def _run_logged(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=dict(env) if env is not None else None,
         creationflags=creationflags,
     )
@@ -577,7 +581,15 @@ def _validate_prerequisites(root: Path, profile: str, logger: logging.Logger) ->
         ],
     ):
         logger.info("preflight: %s", " ".join(command))
-        subprocess.run(command, cwd=root, check=True, capture_output=True, text=True)
+        subprocess.run(
+            command,
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
     logger.info("validated prerequisites for training profile %s", profile)
 
 

@@ -15,6 +15,8 @@ def run_program(binary_path: Path, stdin_text: str, timeout_seconds: int = 5) ->
         input=stdin_text,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout_seconds,
         check=False,
     )

@@ -1,9 +1,9 @@
 model:
-  base_model_id:
-  source_training_profile: sft_qwen35_2b
+  base_model_id: Qwen/Qwen3.5-2B
+  source_training_profile:
   loader_variant: unsloth
 training:
-  max_seq_length: 1792
+  max_seq_length: 1536
   load_in_4bit: true
   precision: bf16
   lora_rank: 32
@@ -11,14 +11,11 @@ training:
   grad_accum_steps: 1
   epochs: 1
   max_steps: 300
-  max_prompt_length: 1024
+  max_prompt_length: 896
   max_completion_length: 384
   generations_per_prompt: 4
   loss_type: dr_grpo
-  multi_reward_weights:
-  - 1.0
-  - 1.0
-  - 1.0
+  multi_reward_weights: [1.0, 1.0, 1.0]
   scale_rewards: group
   beta: 0.0
   mask_truncated_completions: true
@@ -35,10 +32,10 @@ training:
   execution_pass_rate_threshold: 1.0
   min_completion_ratio: 0.2
   max_completion_ratio: 1.5
-  max_invalid_completion_ratio: 0.65
+  max_invalid_completion_ratio: 0.9
   max_function_count: 1
   reward_weights:
-    format: 1.1
+    format: 1.0
     cleanup: 1.0
     naming: 0.0
     compile: 3.5
@@ -49,8 +46,7 @@ training:
     decompiler_type_penalty: 0.75
     overshoot_penalty: 1.0
     multi_function_penalty: 3.0
-    invalid_json_penalty: 0.6
-    invalid_length_penalty: 1.5
-    truncation_penalty: 3.0
+    invalid_json_penalty: 0.35
+    invalid_length_penalty: 1.0
+    truncation_penalty: 2.0
     invalid_scope_penalty: 2.0
-    unknown_constant_penalty: 2.0

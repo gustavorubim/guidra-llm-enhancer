@@ -6,6 +6,7 @@ from typing import Literal
 from decomp_clarifier.schemas.model_io import ClarifiedFunctionOutput
 
 SchemaStatus = Literal["invalid", "extractable", "strict"]
+_THINKING_CLOSE_TAG = "</think>"
 
 
 def extract_json_object(text: str) -> str | None:
@@ -48,21 +49,36 @@ def _fallback_output(text: str) -> ClarifiedFunctionOutput:
     )
 
 
-def normalize_output_with_schema_status(text: str) -> tuple[ClarifiedFunctionOutput, SchemaStatus]:
-    json_fragment = extract_json_object(text)
+def strip_thinking_prefix(text: str) -> str:
+    stripped = text.strip()
+    close_index = stripped.rfind(_THINKING_CLOSE_TAG)
+    if close_index < 0:
+        return stripped
+    return stripped[close_index + len(_THINKING_CLOSE_TAG) :].strip()
+
+
+def normalize_output_with_schema_status(
+    text: str, *, strip_thinking: bool = False
+) -> tuple[ClarifiedFunctionOutput, SchemaStatus]:
+    normalized_text = strip_thinking_prefix(text) if strip_thinking else text
+    json_fragment = extract_json_object(normalized_text)
     if json_fragment is None:
-        return _fallback_output(text), "invalid"
+        return _fallback_output(normalized_text), "invalid"
     try:
         output = ClarifiedFunctionOutput.model_validate(json.loads(json_fragment))
-        if text.strip() == json_fragment.strip():
+        if normalized_text.strip() == json_fragment.strip():
             return output, "strict"
         return output, "extractable"
     except Exception:  # noqa: BLE001 - tolerate malformed generations during inference
-        return _fallback_output(text), "invalid"
+        return _fallback_output(normalized_text), "invalid"
 
 
-def normalize_output_with_status(text: str) -> tuple[ClarifiedFunctionOutput, bool]:
-    output, schema_status = normalize_output_with_schema_status(text)
+def normalize_output_with_status(
+    text: str, *, strip_thinking: bool = False
+) -> tuple[ClarifiedFunctionOutput, bool]:
+    output, schema_status = normalize_output_with_schema_status(
+        text, strip_thinking=strip_thinking
+    )
     return output, schema_status == "strict"
 
 

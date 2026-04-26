@@ -33,6 +33,20 @@ _MIN_COMPLETION_TOKEN_COUNT = 5
 _MAX_COMPLETION_RATIO = 1.75
 _MAX_FUNCTION_COUNT = 1
 _MAX_INVALID_COMPLETION_RATIO = 0.9
+_UPPERCASE_IDENTIFIER_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]{1,}\b")
+_BOOL_TOKEN_PATTERN = re.compile(r"\b(?:bool|true|false)\b")
+_COMMON_C_CONSTANTS = {
+    "EOF",
+    "NULL",
+    "SIZE_MAX",
+    "UINT_MAX",
+    "ULONG_MAX",
+    "INT_MAX",
+    "INT_MIN",
+    "CHAR_BIT",
+    "EXIT_SUCCESS",
+    "EXIT_FAILURE",
+}
 
 
 def _clamp01(value: float) -> float:
@@ -245,6 +259,8 @@ def empty_reward_breakdown(
     invalid_length_penalty_value: float = 0.0,
     truncation_penalty_value: float = 0.0,
     invalid_scope_penalty_value: float = 0.0,
+    unknown_constant_penalty_value: float = 0.0,
+    unsupported_bool_penalty_value: float = 0.0,
     raw_completion_ratio: float = 0.0,
     core_total: float = 0.0,
     style_total: float = 0.0,
@@ -274,6 +290,8 @@ def empty_reward_breakdown(
         "invalid_length_penalty": invalid_length_penalty_value,
         "truncation_penalty": truncation_penalty_value,
         "invalid_scope_penalty": invalid_scope_penalty_value,
+        "unknown_constant_penalty": unknown_constant_penalty_value,
+        "unsupported_bool_penalty": unsupported_bool_penalty_value,
         "raw_completion_ratio": raw_completion_ratio,
         "core_total": core_total,
         "style_total": style_total,
@@ -374,6 +392,41 @@ def decompiler_type_penalty(output: ClarifiedFunctionOutput) -> float:
     return float(min(3, len(types)) / 3)
 
 
+def _uppercase_identifiers(text: str) -> set[str]:
+    return {match.group(0) for match in _UPPERCASE_IDENTIFIER_PATTERN.finditer(text)}
+
+
+def unknown_constant_penalty(
+    output: ClarifiedFunctionOutput,
+    raw_code: str,
+    target_clean_code: str,
+    compile_reference_source: str = "",
+) -> float:
+    allowed = (
+        _uppercase_identifiers(raw_code)
+        | _uppercase_identifiers(target_clean_code)
+        | _uppercase_identifiers(compile_reference_source)
+        | _COMMON_C_CONSTANTS
+    )
+    observed = _uppercase_identifiers(output.cleaned_c)
+    unsupported = observed - allowed
+    return float(min(3, len(unsupported)) / 3)
+
+
+def unsupported_bool_penalty(
+    output: ClarifiedFunctionOutput,
+    target_clean_code: str,
+    compile_reference_source: str = "",
+) -> float:
+    if "<stdbool.h>" in compile_reference_source:
+        return 0.0
+    if _BOOL_TOKEN_PATTERN.search(target_clean_code) or _BOOL_TOKEN_PATTERN.search(
+        compile_reference_source
+    ):
+        return 0.0
+    return 1.0 if _BOOL_TOKEN_PATTERN.search(output.cleaned_c) else 0.0
+
+
 def hallucination_penalty(
     output: ClarifiedFunctionOutput,
     allowed_imports: list[str],
@@ -420,6 +473,7 @@ def reward_breakdown(
     min_completion_ratio: float = 0.3,
     max_completion_ratio: float = _MAX_COMPLETION_RATIO,
     max_function_count: int = _MAX_FUNCTION_COUNT,
+    compile_reference_source: str = "",
 ) -> dict[str, float]:
     if not json_valid or not output.summary.strip() or not output.cleaned_c.strip():
         return empty_reward_breakdown(
@@ -466,6 +520,17 @@ def reward_breakdown(
     readability_value = readability_reward(output, raw_code)
     signature_value = signature_reward(output, target_clean_code, source_function_name)
     hallucination_value = hallucination_penalty(output, allowed_imports, allowed_callees)
+    unknown_constant_value = unknown_constant_penalty(
+        output,
+        raw_code,
+        target_clean_code,
+        compile_reference_source,
+    )
+    unsupported_bool_value = unsupported_bool_penalty(
+        output,
+        target_clean_code,
+        compile_reference_source,
+    )
     decompiler_type_value = decompiler_type_penalty(output)
     gate_factor = safety_gate_factor(
         compile_success=compile_success,
@@ -487,6 +552,8 @@ def reward_breakdown(
         )
     penalty_total = (
         weights.get("hallucination_penalty", 1.0) * hallucination_value
+        + weights.get("unknown_constant_penalty", 0.0) * unknown_constant_value
+        + weights.get("unsupported_bool_penalty", 0.0) * unsupported_bool_value
         + weights.get("decompiler_type_penalty", 0.0) * decompiler_type_value
         + weights.get("overshoot_penalty", 0.0) * overshoot_value
         + weights.get("multi_function_penalty", 0.0) * multi_function_value
@@ -511,6 +578,8 @@ def reward_breakdown(
         "readability": readability_value,
         "signature": signature_value,
         "hallucination_penalty": hallucination_value,
+        "unknown_constant_penalty": unknown_constant_value,
+        "unsupported_bool_penalty": unsupported_bool_value,
         "decompiler_type_penalty": decompiler_type_value,
         "failure_penalty": failure_penalty,
         "gate_factor": gate_factor,
@@ -553,6 +622,7 @@ def weighted_reward(
     min_completion_ratio: float = 0.3,
     max_completion_ratio: float = _MAX_COMPLETION_RATIO,
     max_function_count: int = _MAX_FUNCTION_COUNT,
+    compile_reference_source: str = "",
 ) -> float:
     return reward_breakdown(
         output=output,
@@ -574,4 +644,5 @@ def weighted_reward(
         min_completion_ratio=min_completion_ratio,
         max_completion_ratio=max_completion_ratio,
         max_function_count=max_function_count,
+        compile_reference_source=compile_reference_source,
     )["total"]

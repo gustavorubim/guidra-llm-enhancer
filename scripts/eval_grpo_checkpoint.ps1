@@ -1,12 +1,13 @@
 param(
     [string]$CheckpointDir = "",
-    [string]$TrainingProfile = "grpo_qwen35_2b",
+    [string]$TrainingProfile = "grpo_qwen35_2b_champion_300",
     [string]$AppProfile = "default",
     [string]$Split = "val",
     [int]$InspectionSampleCount = 8,
     [int]$MaxNewTokens = 384,
     [double]$Temperature = 0.0,
     [string]$PromptProfile = "stage",
+    [switch]$Thinking,
     [int]$SampleLimit = 0
 )
 
@@ -32,6 +33,9 @@ if ($CheckpointDir) {
 }
 if ($SampleLimit -gt 0) {
     $args += @("--sample-limit", $SampleLimit)
+}
+if ($Thinking) {
+    $args += @("--thinking")
 }
 
 & $python.Path @args
