@@ -117,19 +117,21 @@ Current reward components:
 | `hallucination_penalty` | `0.0+` penalty | Fewer invented calls | Penalizes calls not present in the binary-grounded imports/callees context |
 | `decompiler_type_penalty` | `0.0+` penalty | Fewer Ghidra pseudo-types | Penalizes artifacts like `undefined8`, `ulong64`, `ulonglong`, and `longlong` |
 
-Default GRPO weights from `configs/training/grpo_qwen35_2b.yaml`:
+Champion GRPO weights from `configs/training/grpo_qwen35_2b_champion_300.yaml`:
 
 | Weight key | Default |
 |---|---|
-| `format` | `0.5` |
-| `cleanup` | `1.5` |
-| `naming` | `1.0` |
-| `compile` | `3.0` |
-| `behavior` | `3.0` |
-| `readability` | `0.75` |
-| `signature` | `1.25` |
-| `hallucination_penalty` | `1.5` |
-| `decompiler_type_penalty` | `1.5` |
+| `format` | `1.1` |
+| `cleanup` | `1.0` |
+| `naming` | `0.0` |
+| `compile` | `3.5` |
+| `behavior` | `3.5` |
+| `readability` | `0.35` |
+| `signature` | `1.5` |
+| `hallucination_penalty` | `1.25` |
+| `decompiler_type_penalty` | `0.75` |
+| `invalid_scope_penalty` | `2.0` |
+| `unknown_constant_penalty` | `2.0` |
 
 Important status note:
 

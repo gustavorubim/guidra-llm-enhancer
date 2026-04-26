@@ -1,5 +1,5 @@
 param(
-    [string]$TrainingProfile = "grpo_qwen35_2b",
+    [string]$TrainingProfile = "grpo_qwen35_2b_champion_300",
     [string]$AppProfile = "default",
     [string]$BaseModelId = "",
     [switch]$AllowRawBase

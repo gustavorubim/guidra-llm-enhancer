@@ -842,7 +842,7 @@ def run_baselines(
             from decomp_clarifier.dataset.prompt_formatter import format_rl_prompt
             from decomp_clarifier.inference.checkpoint_predictor import CheckpointPredictor
 
-            base_config = load_training_config(root, "grpo_qwen35_2b")
+            base_config = load_training_config(root, "grpo_qwen35_2b_champion_300")
             base_config.model.base_model_id = base_model_local_id
             base_qwen_predictor = CheckpointPredictor(
                 base_model_local_id,
@@ -1104,7 +1104,7 @@ def train_sft(
 
 @app.command("train-grpo")
 def train_grpo(
-    training_profile: str = typer.Option("grpo_qwen35_2b"),
+    training_profile: str = typer.Option("grpo_qwen35_2b_champion_300"),
     base_model_id: str | None = typer.Option(
         None,
         help=(
@@ -1258,7 +1258,7 @@ def eval_sft_checkpoint(
 @app.command("eval-grpo-checkpoint")
 def eval_grpo_checkpoint(
     checkpoint_dir: Path | None = typer.Option(None),  # noqa: B008
-    training_profile: str = typer.Option("grpo_qwen35_2b"),
+    training_profile: str = typer.Option("grpo_qwen35_2b_champion_300"),
     split: str = typer.Option("val"),
     sample_limit: int | None = typer.Option(None),
     inspection_sample_count: int = typer.Option(8),

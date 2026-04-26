@@ -21,7 +21,7 @@ from decomp_clarifier.settings import load_app_config  # noqa: E402
 
 SUMMARY_PROFILE_COLUMNS = [
     "sft_qwen35_2b",
-    "grpo_qwen35_2b",
+    "grpo_qwen35_2b_champion_300",
     "sft_gemma4_e2b_it",
     "grpo_gemma4_e2b_it",
     "sft_qwen35_4b",
