@@ -1,0 +1,162 @@
+{
+  "deltas": {
+    "best_grpo_minus_raw": {
+      "behavior_success_rate": 0.5619047619047619,
+      "compile_success_rate": 0.6761904761904762,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.7712471655328799,
+      "readability_improvement": 0.34108794196970016,
+      "readability_score": 0.34108794196970016,
+      "score": 0.46590695546779054
+    },
+    "best_grpo_minus_sft": {
+      "behavior_success_rate": 0.01904761904761909,
+      "compile_success_rate": 0.0,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.0,
+      "readability_improvement": -0.0001547055441158962,
+      "readability_score": -0.0001547055441158962,
+      "score": 0.005691079882668371
+    },
+    "current_pinned_champion_minus_sft": {
+      "behavior_success_rate": -0.03809523809523807,
+      "compile_success_rate": -0.05714285714285716,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.004338624338624308,
+      "readability_improvement": -0.0007285001537390423,
+      "readability_score": -0.0007285001537390423,
+      "score": -0.02538969830348392
+    },
+    "sft_minus_raw": {
+      "behavior_success_rate": 0.5428571428571428,
+      "compile_success_rate": 0.6761904761904762,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.7712471655328799,
+      "readability_improvement": 0.34124264751381606,
+      "readability_score": 0.34124264751381606,
+      "score": 0.46021587558512217
+    }
+  },
+  "generated_at": "2026-04-27T20:29:27-04:00",
+  "sample_set_check": {
+    "best_grpo_run_id": "eval-grpo-checkpoint-20260425-024529",
+    "same_sample_order_verified": true,
+    "sample_count": 105,
+    "sft_run_id": "eval-sft-checkpoint-20260425-021627",
+    "split": "val"
+  },
+  "score_formula": {
+    "behavior_success_rate": 0.3,
+    "compile_success_rate": 0.25,
+    "json_valid_rate": 0.2,
+    "naming_score": 0.1,
+    "readability_score": 0.15
+  },
+  "systems": {
+    "base_qwen_openrouter": {
+      "label": "Original Qwen",
+      "metrics": {
+        "behavior_success_rate": 0.0,
+        "compile_success_rate": 0.02857142857142857,
+        "field_complete_rate": 0.0,
+        "json_valid_rate": 0.0,
+        "naming_score": 0.0,
+        "readability_improvement": 0.0,
+        "readability_score": 0.534346310262212
+      },
+      "notes": "Base Qwen model via OpenRouter, no SFT/GRPO.",
+      "run_id": null,
+      "score": 0.08729480368218895
+    },
+    "best_grpo_checkpoint": {
+      "checkpoint_dir": "artifacts\\runs\\train-grpo-20260424-203644\\model",
+      "label": "Best GRPO checkpoint",
+      "manifest": "artifacts\\runs\\eval-grpo-checkpoint-20260425-024529\\checkpoint_eval_manifest.json",
+      "metrics": {
+        "behavior_success_rate": 0.5619047619047619,
+        "compile_success_rate": 0.7047619047619048,
+        "field_complete_rate": 1.0,
+        "json_valid_rate": 1.0,
+        "naming_score": 0.9141043083900227,
+        "readability_improvement": 0.34108794196970016,
+        "readability_score": 0.8754342522319122
+      },
+      "notes": "Best observed GRPO by campaign score on 105-sample eval.",
+      "prompt_profile": "context_plus_strict",
+      "run_id": "eval-grpo-checkpoint-20260425-024529",
+      "score": 0.7674874734356938,
+      "training_profile": "research\\campaigns\\gdpo-sft-target-apr24\\profiles\\0005-context_plus_constant_strict_json_v1.yaml"
+    },
+    "current_pinned_champion": {
+      "checkpoint_dir": "artifacts\\runs\\train-grpo-20260425-111558\\model",
+      "label": "Current pinned champion",
+      "manifest": "artifacts\\runs\\eval-grpo-checkpoint-20260425-123742\\checkpoint_eval_manifest.json",
+      "metrics": {
+        "behavior_success_rate": 0.5047619047619047,
+        "compile_success_rate": 0.6476190476190476,
+        "field_complete_rate": 1.0,
+        "json_valid_rate": 1.0,
+        "naming_score": 0.918442932728647,
+        "readability_improvement": 0.340514147360077,
+        "readability_score": 0.874860457622289
+      },
+      "notes": "Current kept champion config, selected by full-prompt target campaign.",
+      "prompt_profile": "full",
+      "run_id": "eval-grpo-checkpoint-20260425-123742",
+      "score": 0.7364066952495415,
+      "training_profile": "research\\campaigns\\gdpo-sft-target-apr24\\profiles\\0019-invalid_scope_guard_v1.yaml"
+    },
+    "prompt_only_cleanup": {
+      "label": "Prompt-only cleanup",
+      "metrics": {
+        "behavior_success_rate": 0.29523809523809524,
+        "compile_success_rate": 0.3238095238095238,
+        "field_complete_rate": 1.0,
+        "json_valid_rate": 1.0,
+        "naming_score": 0.4102972160115017,
+        "readability_improvement": 0.1936127438577796,
+        "readability_score": 0.7279590541199916
+      },
+      "notes": "Prompted baseline, no checkpoint fine-tune.",
+      "run_id": null,
+      "score": 0.5197473892429585
+    },
+    "raw_ghidra": {
+      "label": "Raw Ghidra",
+      "metrics": {
+        "behavior_success_rate": 0.0,
+        "compile_success_rate": 0.02857142857142857,
+        "field_complete_rate": 1.0,
+        "json_valid_rate": 1.0,
+        "naming_score": 0.14285714285714285,
+        "readability_improvement": 0.0,
+        "readability_score": 0.534346310262212
+      },
+      "notes": "Raw decompiler output baseline.",
+      "run_id": null,
+      "score": 0.30158051796790325
+    },
+    "sft_checkpoint": {
+      "checkpoint_dir": "artifacts\\runs\\train-sft-20260418-161635\\model",
+      "label": "SFT checkpoint",
+      "manifest": "artifacts\\runs\\eval-sft-checkpoint-20260425-021627\\checkpoint_eval_manifest.json",
+      "metrics": {
+        "behavior_success_rate": 0.5428571428571428,
+        "compile_success_rate": 0.7047619047619048,
+        "field_complete_rate": 1.0,
+        "json_valid_rate": 1.0,
+        "naming_score": 0.9141043083900227,
+        "readability_improvement": 0.34124264751381606,
+        "readability_score": 0.8755889577760281
+      },
+      "notes": "Latest 105-sample SFT eval.",
+      "prompt_profile": "context_plus_strict",
+      "run_id": "eval-sft-checkpoint-20260425-021627",
+      "score": 0.7617963935530254
+    }
+  }
+}

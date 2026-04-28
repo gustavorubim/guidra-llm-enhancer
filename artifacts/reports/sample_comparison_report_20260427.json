@@ -1,0 +1,557 @@
+{
+  "baseline_predictions_path": "artifacts\\runs\\baseline-20260414-144530\\baseline_predictions.jsonl",
+  "dataset_path": "data\\processed\\sft\\function_dataset.jsonl",
+  "generated_at": "2026-04-27T20:50:01-04:00",
+  "grpo_predictions_path": "artifacts\\runs\\eval-grpo-checkpoint-20260425-024529\\predictions.jsonl",
+  "metrics": {
+    "decompiled": {
+      "behavior_success_rate": 0.0,
+      "compile_success_rate": 0.0,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.2,
+      "readability_score": 0.5117305502428303
+    },
+    "grpo_model": {
+      "behavior_success_rate": 0.6,
+      "compile_success_rate": 0.6,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.8666666666666666,
+      "readability_score": 0.8726894319131162
+    },
+    "original_model": {
+      "behavior_success_rate": 0.2,
+      "compile_success_rate": 0.2,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.3,
+      "readability_score": 0.6568701462634249
+    },
+    "qwen_via_prompt": {
+      "behavior_success_rate": 0.0,
+      "compile_success_rate": 0.0,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.0,
+      "readability_score": 0.5117305502428303
+    },
+    "sft_model": {
+      "behavior_success_rate": 0.6,
+      "compile_success_rate": 0.6,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.8666666666666666,
+      "readability_score": 0.8673795648795648
+    }
+  },
+  "original_system": "prompt_only_cleanup",
+  "qwen_system": "base_qwen_openrouter",
+  "random_seed": 20260427,
+  "run_id": "sample-comparison-report-20260427-204956",
+  "sample_count": 5,
+  "samples": [
+    {
+      "decompiled": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+      "original_source": "static void trim_inplace(char *s) {\n    size_t len = strlen(s);\n    size_t start = 0;\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+      "project_id": "c11_text_flags_parser_001",
+      "sample_id": "15f76cf6deb59214",
+      "source_function_name": "trim_inplace",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19626168224299065,
+            "readability_score": 0.5162990196078431,
+            "sample_id": "15f76cf6deb59214",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static void trim_inplace(char *s) {\n    size_t start = 0;\n    size_t len = strlen(s);\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.84375,
+            "sample_id": "15f76cf6deb59214",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Remove leading and trailing whitespace from a mutable string buffer.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "void trim_inplace(char *str) {\n    size_t len = strlen(str);\n    size_t start = 0;\n    size_t end = len;\n\n    // Skip leading whitespace\n    while (start < len && isspace((unsigned char)str[start])) {\n        start++;\n    }\n\n    // Skip trailing whitespace\n    while (start < end && isspace((unsigned char)str[end - 1])) {\n        end--;\n    }\n\n    // If there was leading whitespace, shift the string left\n    if (start > 0) {\n        memcpy(str, str + start, end - start);\n    }\n\n    // Null-terminate the trimmed string\n    str[end - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.5,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8835526315789474,
+            "sample_id": "15f76cf6deb59214",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "This function trims leading and trailing whitespace characters from a mutable C string in place. It first calculates the string length, then advances a start index past all leading whitespace, and reduces an end index before all trailing whitespace. If any leading whitespace was removed, it shifts the remaining substring to the front of the buffer using memcpy. Finally, it null-terminates the string after the trimmed content.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19626168224299065,
+            "readability_score": 0.5162990196078431,
+            "sample_id": "15f76cf6deb59214",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static void trim_inplace(char *s) {\n    size_t start = 0;\n    size_t len = strlen(s);\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.84375,
+            "sample_id": "15f76cf6deb59214",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Remove leading and trailing whitespace from a mutable string buffer.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "full_clarify"
+    },
+    {
+      "decompiled": "\r\nint __cdecl find_pair(Pair *param_1,int param_2,char *param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int local_24;\r\n  \r\n  local_24 = 0;\r\n  while( true ) {\r\n    if (param_2 <= local_24) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_24 = local_24 + 1;\r\n  }\r\n  return local_24;\r\n}\r\n\r\n",
+      "original_source": "static int find_pair(Pair *pairs, int count, const char *key) {\n    for (int i = 0; i < count; i++) {\n        if (strcmp(pairs[i].key, key) == 0) return i;\n    }\n    return -1;\n}",
+      "project_id": "cfg_token_pipeline_001_v1",
+      "sample_id": "66690e9221bcc1e4",
+      "source_function_name": "find_pair",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Pair *param_1,int param_2,char *param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int local_24;\r\n  \r\n  local_24 = 0;\r\n  while( true ) {\r\n    if (param_2 <= local_24) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_24 = local_24 + 1;\r\n  }\r\n  return local_24;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19047619047619047,
+            "readability_score": 0.5233333333333333,
+            "sample_id": "66690e9221bcc1e4",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int find_pair(Pair *pairs, int count, const char *key) {\n    for (int i = 0; i < count; i++) {\n        if (strcmp(pairs[i].key, key) == 0) return i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8798611111111111,
+            "sample_id": "66690e9221bcc1e4",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate an existing key in the stored pair array.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Pair *param_1,int param_2,char *param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int local_24;\r\n  \r\n  local_24 = 0;\r\n  while( true ) {\r\n    if (param_2 <= local_24) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_24 = local_24 + 1;\r\n  }\r\n  return local_24;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19047619047619047,
+            "readability_score": 0.5233333333333333,
+            "sample_id": "66690e9221bcc1e4",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for find_pair.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Pair *param_1,int param_2,char *param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int local_24;\r\n  \r\n  local_24 = 0;\r\n  while( true ) {\r\n    if (param_2 <= local_24) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_24 = local_24 + 1;\r\n  }\r\n  return local_24;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19047619047619047,
+            "readability_score": 0.5233333333333333,
+            "sample_id": "66690e9221bcc1e4",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int find_pair(Pair *pairs, int count, const char *key) {\n    for (int i = 0; i < count; i++) {\n        if (strcmp(pairs[i].key, key) == 0) return i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8798611111111111,
+            "sample_id": "66690e9221bcc1e4",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate an existing key in the stored pair array.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "full_clarify"
+    },
+    {
+      "decompiled": "\r\nint __cdecl handle_command(Store *param_1,char (*param_2) [32],int param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int extraout_EAX_00;\r\n  int iVar1;\r\n  int extraout_EAX_01;\r\n  long lVar2;\r\n  int extraout_EAX_02;\r\n  ulonglong local_50;\r\n  char (*local_40) [32];\r\n  int local_38;\r\n  int local_34;\r\n  char (*local_30) [32];\r\n  int local_28;\r\n  long local_24;\r\n  char (*local_20) [32];\r\n  Store *local_18;\r\n  char (*local_10) [32];\r\n  int local_8;\r\n  int local_4;\r\n  \r\n  if (param_3 == 0) {\r\n    local_4 = 1;\r\n  }\r\n  else {\r\n    local_18 = param_1;\r\n    local_10 = param_2;\r\n    local_8 = param_3;\r\n    strcmp();\r\n    if ((extraout_EAX == 0) && (local_8 == 3)) {\r\n      local_20 = (char (*) [32])0x0;\r\n      local_24 = strtol(local_10[2],(char **)&local_20,10);\r\n      if ((local_20 == local_10 + 2) || ((*local_20)[0] != '\\0')) {\r\n        local_4 = 0;\r\n      }\r\n      else {\r\n        local_4 = set_pair(local_18,local_10[1],local_24);\r\n      }\r\n    }\r\n    else {\r\n      strcmp();\r\n      if ((extraout_EAX_00 == 0) && (local_8 == 3)) {\r\n        local_28 = 0;\r\n        local_30 = (char (*) [32])0x0;\r\n        local_34 = strtol(local_10[2],(char **)&local_30,10);\r\n        if ((local_30 == local_10 + 2) || ((*local_30)[0] != '\\0')) {\r\n          local_4 = 0;\r\n        }\r\n        else {\r\n          iVar1 = get_pair(local_18,local_10[1],&local_28);\r\n          if (iVar1 == 0) {\r\n            local_28 = 0;\r\n          }\r\n          local_4 = set_pair(local_18,local_10[1],local_28 + local_34);\r\n        }\r\n      }\r\n      else {\r\n        strcmp();\r\n        if ((extraout_EAX_01 == 0) && (local_8 == 3)) {\r\n          local_38 = 0;\r\n          local_40 = (char (*) [32])0x0;\r\n          lVar2 = strtol(local_10[2],(char **)&local_40,10);\r\n          if ((local_40 == local_10 + 2) || ((*local_40)[0] != '\\0')) {\r\n            local_4 = 0;\r\n          }\r\n          else {\r\n            iVar1 = get_pair(local_18,local_10[1],&local_38);\r\n            if (iVar1 == 0) {\r\n              local_38 = 0;\r\n            }\r\n            local_4 = set_pair(local_18,local_10[1],local_38 * lVar2);\r\n          }\r\n        }\r\n        else {\r\n          strcmp();\r\n          if ((extraout_EAX_02 == 0) && (local_8 == 2)) {\r\n            iVar1 = find_pair(local_18,local_10[1]);\r\n            if (iVar1 < 0) {\r\n              local_4 = 1;\r\n            }\r\n            else {\r\n              local_50 = (ulonglong)iVar1;\r\n              while (local_50 = local_50 + 1, local_50 < local_18->count) {\r\n                memcpy();\r\n              }\r\n              local_18->count = local_18->count - 1;\r\n              local_4 = 1;\r\n            }\r\n          }\r\n          else {\r\n            local_4 = 0;\r\n          }\r\n        }\r\n      }\r\n    }\r\n  }\r\n  return local_4;\r\n}\r\n\r\n",
+      "original_source": "static int handle_command(Store *st, char tokens[MAX_TOKENS][MAX_TOKEN_LEN], int ntok) {\n    if (ntok == 0) return 1;\n    if (strcmp(tokens[0], \"set\") == 0 && ntok == 3) {\n        char *end = NULL;\n        long v = strtol(tokens[2], &end, 10);\n        if (end == tokens[2] || *end != '\\0') return 0;\n        return set_pair(st, tokens[1], (int)v);\n    }\n    if (strcmp(tokens[0], \"add\") == 0 && ntok == 3) {\n        int cur = 0;\n        char *end = NULL;\n        long delta = strtol(tokens[2], &end, 10);\n        if (end == tokens[2] || *end != '\\0') return 0;\n        if (!get_pair(st, tokens[1], &cur)) cur = 0;\n        return set_pair(st, tokens[1], cur + (int)delta);\n    }\n    if (strcmp(tokens[0], \"mul\") == 0 && ntok == 3) {\n        int cur = 0;\n        char *end = NULL;\n        long factor = strtol(tokens[2], &end, 10);\n        if (end == tokens[2] || *end != '\\0') return 0;\n        if (!get_pair(st, tokens[1], &cur)) cur = 0;\n        return set_pair(st, tokens[1], cur * (int)factor);\n    }\n    if (strcmp(tokens[0], \"del\") == 0 && ntok == 2) {\n        int idx = find_pair(st, tokens[1]);\n        if (idx < 0) return 1;\n        for (size_t i = (size_t)idx + 1; i < st->count; i++) st->items[i - 1] = st->items[i];\n        st->count--;\n        return 1;\n    }\n    return 0;\n}",
+      "project_id": "cfg_token_router_001",
+      "sample_id": "fc3d59c077e1e126",
+      "source_function_name": "handle_command",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl handle_command(Store *param_1,char (*param_2) [32],int param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int extraout_EAX_00;\r\n  int iVar1;\r\n  int extraout_EAX_01;\r\n  long lVar2;\r\n  int extraout_EAX_02;\r\n  ulonglong local_50;\r\n  char (*local_40) [32];\r\n  int local_38;\r\n  int local_34;\r\n  char (*local_30) [32];\r\n  int local_28;\r\n  long local_24;\r\n  char (*local_20) [32];\r\n  Store *local_18;\r\n  char (*local_10) [32];\r\n  int local_8;\r\n  int local_4;\r\n  \r\n  if (param_3 == 0) {\r\n    local_4 = 1;\r\n  }\r\n  else {\r\n    local_18 = param_1;\r\n    local_10 = param_2;\r\n    local_8 = param_3;\r\n    strcmp();\r\n    if ((extraout_EAX == 0) && (local_8 == 3)) {\r\n      local_20 = (char (*) [32])0x0;\r\n      local_24 = strtol(local_10[2],(char **)&local_20,10);\r\n      if ((local_20 == local_10 + 2) || ((*local_20)[0] != '\\0')) {\r\n        local_4 = 0;\r\n      }\r\n      else {\r\n        local_4 = set_pair(local_18,local_10[1],local_24);\r\n      }\r\n    }\r\n    else {\r\n      strcmp();\r\n      if ((extraout_EAX_00 == 0) && (local_8 == 3)) {\r\n        local_28 = 0;\r\n        local_30 = (char (*) [32])0x0;\r\n        local_34 = strtol(local_10[2],(char **)&local_30,10);\r\n        if ((local_30 == local_10 + 2) || ((*local_30)[0] != '\\0')) {\r\n          local_4 = 0;\r\n        }\r\n        else {\r\n          iVar1 = get_pair(local_18,local_10[1],&local_28);\r\n          if (iVar1 == 0) {\r\n            local_28 = 0;\r\n          }\r\n          local_4 = set_pair(local_18,local_10[1],local_28 + local_34);\r\n        }\r\n      }\r\n      else {\r\n        strcmp();\r\n        if ((extraout_EAX_01 == 0) && (local_8 == 3)) {\r\n          local_38 = 0;\r\n          local_40 = (char (*) [32])0x0;\r\n          lVar2 = strtol(local_10[2],(char **)&local_40,10);\r\n          if ((local_40 == local_10 + 2) || ((*local_40)[0] != '\\0')) {\r\n            local_4 = 0;\r\n          }\r\n          else {\r\n            iVar1 = get_pair(local_18,local_10[1],&local_38);\r\n            if (iVar1 == 0) {\r\n              local_38 = 0;\r\n            }\r\n            local_4 = set_pair(local_18,local_10[1],local_38 * lVar2);\r\n          }\r\n        }\r\n        else {\r\n          strcmp();\r\n          if ((extraout_EAX_02 == 0) && (local_8 == 2)) {\r\n            iVar1 = find_pair(local_18,local_10[1]);\r\n            if (iVar1 < 0) {\r\n              local_4 = 1;\r\n            }\r\n            else {\r\n              local_50 = (ulonglong)iVar1;\r\n              while (local_50 = local_50 + 1, local_50 < local_18->count) {\r\n                memcpy();\r\n              }\r\n              local_18->count = local_18->count - 1;\r\n              local_4 = 1;\r\n            }\r\n          }\r\n          else {\r\n            local_4 = 0;\r\n          }\r\n        }\r\n      }\r\n    }\r\n  }\r\n  return local_4;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.21212121212121213,
+            "readability_score": 0.4923109965635738,
+            "sample_id": "fc3d59c077e1e126",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int handle_command(const Store *st, const char *cmd, int argc) {\n    if (argc == 0) return 1;\n    const char *key = cmd;\n    const char *value;\n    long v;\n    if (strcmp(key, \"set\") == 0) {\n        if (strcmp(cmd[1], \"=\") == 0) {\n            v = strtol(cmd[2], NULL, 10);\n            if (v == st->value && st->key) {\n                st->value = v;\n                return 1;\n            }\n        }\n        return 0;\n    }\n    if (strcmp(key, \"get\") == 0) {\n        if (strcmp(cmd[1], \"=\") == 0) {\n            const int *it = find_pair(st, cmd[2]);\n            if (it) {\n                st->value = *it;\n                return 1;\n            }\n        }\n        return 0;\n    }\n    if (strcmp(key, \"remove\") == 0) {\n        const int *it = find_pair(st, cmd[1]);\n        if (it) {\n            st->value = 0;\n            return 1;\n        }\n        return 0;\n    }\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.3333333333333333,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8985714285714286,
+            "sample_id": "fc3d59c077e1e126",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Validate and apply one supported command to the store.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl handle_command(Store *param_1,char (*param_2) [32],int param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int extraout_EAX_00;\r\n  int iVar1;\r\n  int extraout_EAX_01;\r\n  long lVar2;\r\n  int extraout_EAX_02;\r\n  ulonglong local_50;\r\n  char (*local_40) [32];\r\n  int local_38;\r\n  int local_34;\r\n  char (*local_30) [32];\r\n  int local_28;\r\n  long local_24;\r\n  char (*local_20) [32];\r\n  Store *local_18;\r\n  char (*local_10) [32];\r\n  int local_8;\r\n  int local_4;\r\n  \r\n  if (param_3 == 0) {\r\n    local_4 = 1;\r\n  }\r\n  else {\r\n    local_18 = param_1;\r\n    local_10 = param_2;\r\n    local_8 = param_3;\r\n    strcmp();\r\n    if ((extraout_EAX == 0) && (local_8 == 3)) {\r\n      local_20 = (char (*) [32])0x0;\r\n      local_24 = strtol(local_10[2],(char **)&local_20,10);\r\n      if ((local_20 == local_10 + 2) || ((*local_20)[0] != '\\0')) {\r\n        local_4 = 0;\r\n      }\r\n      else {\r\n        local_4 = set_pair(local_18,local_10[1],local_24);\r\n      }\r\n    }\r\n    else {\r\n      strcmp();\r\n      if ((extraout_EAX_00 == 0) && (local_8 == 3)) {\r\n        local_28 = 0;\r\n        local_30 = (char (*) [32])0x0;\r\n        local_34 = strtol(local_10[2],(char **)&local_30,10);\r\n        if ((local_30 == local_10 + 2) || ((*local_30)[0] != '\\0')) {\r\n          local_4 = 0;\r\n        }\r\n        else {\r\n          iVar1 = get_pair(local_18,local_10[1],&local_28);\r\n          if (iVar1 == 0) {\r\n            local_28 = 0;\r\n          }\r\n          local_4 = set_pair(local_18,local_10[1],local_28 + local_34);\r\n        }\r\n      }\r\n      else {\r\n        strcmp();\r\n        if ((extraout_EAX_01 == 0) && (local_8 == 3)) {\r\n          local_38 = 0;\r\n          local_40 = (char (*) [32])0x0;\r\n          lVar2 = strtol(local_10[2],(char **)&local_40,10);\r\n          if ((local_40 == local_10 + 2) || ((*local_40)[0] != '\\0')) {\r\n            local_4 = 0;\r\n          }\r\n          else {\r\n            iVar1 = get_pair(local_18,local_10[1],&local_38);\r\n            if (iVar1 == 0) {\r\n              local_38 = 0;\r\n            }\r\n            local_4 = set_pair(local_18,local_10[1],local_38 * lVar2);\r\n          }\r\n        }\r\n        else {\r\n          strcmp();\r\n          if ((extraout_EAX_02 == 0) && (local_8 == 2)) {\r\n            iVar1 = find_pair(local_18,local_10[1]);\r\n            if (iVar1 < 0) {\r\n              local_4 = 1;\r\n            }\r\n            else {\r\n              local_50 = (ulonglong)iVar1;\r\n              while (local_50 = local_50 + 1, local_50 < local_18->count) {\r\n                memcpy();\r\n              }\r\n              local_18->count = local_18->count - 1;\r\n              local_4 = 1;\r\n            }\r\n          }\r\n          else {\r\n            local_4 = 0;\r\n          }\r\n        }\r\n      }\r\n    }\r\n  }\r\n  return local_4;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.21212121212121213,
+            "readability_score": 0.4923109965635738,
+            "sample_id": "fc3d59c077e1e126",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for handle_command.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl handle_command(Store *param_1,char (*param_2) [32],int param_3)\r\n\r\n{\r\n  int extraout_EAX;\r\n  int extraout_EAX_00;\r\n  int iVar1;\r\n  int extraout_EAX_01;\r\n  long lVar2;\r\n  int extraout_EAX_02;\r\n  ulonglong local_50;\r\n  char (*local_40) [32];\r\n  int local_38;\r\n  int local_34;\r\n  char (*local_30) [32];\r\n  int local_28;\r\n  long local_24;\r\n  char (*local_20) [32];\r\n  Store *local_18;\r\n  char (*local_10) [32];\r\n  int local_8;\r\n  int local_4;\r\n  \r\n  if (param_3 == 0) {\r\n    local_4 = 1;\r\n  }\r\n  else {\r\n    local_18 = param_1;\r\n    local_10 = param_2;\r\n    local_8 = param_3;\r\n    strcmp();\r\n    if ((extraout_EAX == 0) && (local_8 == 3)) {\r\n      local_20 = (char (*) [32])0x0;\r\n      local_24 = strtol(local_10[2],(char **)&local_20,10);\r\n      if ((local_20 == local_10 + 2) || ((*local_20)[0] != '\\0')) {\r\n        local_4 = 0;\r\n      }\r\n      else {\r\n        local_4 = set_pair(local_18,local_10[1],local_24);\r\n      }\r\n    }\r\n    else {\r\n      strcmp();\r\n      if ((extraout_EAX_00 == 0) && (local_8 == 3)) {\r\n        local_28 = 0;\r\n        local_30 = (char (*) [32])0x0;\r\n        local_34 = strtol(local_10[2],(char **)&local_30,10);\r\n        if ((local_30 == local_10 + 2) || ((*local_30)[0] != '\\0')) {\r\n          local_4 = 0;\r\n        }\r\n        else {\r\n          iVar1 = get_pair(local_18,local_10[1],&local_28);\r\n          if (iVar1 == 0) {\r\n            local_28 = 0;\r\n          }\r\n          local_4 = set_pair(local_18,local_10[1],local_28 + local_34);\r\n        }\r\n      }\r\n      else {\r\n        strcmp();\r\n        if ((extraout_EAX_01 == 0) && (local_8 == 3)) {\r\n          local_38 = 0;\r\n          local_40 = (char (*) [32])0x0;\r\n          lVar2 = strtol(local_10[2],(char **)&local_40,10);\r\n          if ((local_40 == local_10 + 2) || ((*local_40)[0] != '\\0')) {\r\n            local_4 = 0;\r\n          }\r\n          else {\r\n            iVar1 = get_pair(local_18,local_10[1],&local_38);\r\n            if (iVar1 == 0) {\r\n              local_38 = 0;\r\n            }\r\n            local_4 = set_pair(local_18,local_10[1],local_38 * lVar2);\r\n          }\r\n        }\r\n        else {\r\n          strcmp();\r\n          if ((extraout_EAX_02 == 0) && (local_8 == 2)) {\r\n            iVar1 = find_pair(local_18,local_10[1]);\r\n            if (iVar1 < 0) {\r\n              local_4 = 1;\r\n            }\r\n            else {\r\n              local_50 = (ulonglong)iVar1;\r\n              while (local_50 = local_50 + 1, local_50 < local_18->count) {\r\n                memcpy();\r\n              }\r\n              local_18->count = local_18->count - 1;\r\n              local_4 = 1;\r\n            }\r\n          }\r\n          else {\r\n            local_4 = 0;\r\n          }\r\n        }\r\n      }\r\n    }\r\n  }\r\n  return local_4;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.21212121212121213,
+            "readability_score": 0.4923109965635738,
+            "sample_id": "fc3d59c077e1e126",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int handle_command(const Store *st, const char *cmd, int argc) {\n    if (argc == 0) return 1;\n    if (strcmp(cmd, \"set\") == 0) {\n        const char *key = cmd[2];\n        const char *value = cmd[4];\n        if (key[0] == '\\0' || value[0] == '\\0') return 0;\n        return set_pair(st, key, (int64_t)strtoll(value, NULL, 10));\n    }\n    if (strcmp(cmd, \"get\") == 0) {\n        const char *key = cmd[2];\n        const int64_t *v = get_pair(st, key);\n        if (!v) return 0;\n        return *v;\n    }\n    if (strcmp(cmd, \"find\") == 0) {\n        const char *key = cmd[2];\n        const int64_t *v = find_pair(st, key);\n        if (!v) return 1;\n        return 1;\n    }\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.3333333333333333,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8738636363636364,
+            "sample_id": "fc3d59c077e1e126",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Validate and apply one supported command to the store.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "cleanup"
+    },
+    {
+      "decompiled": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+      "original_source": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+      "project_id": "cfg_token_router_001",
+      "sample_id": "3355a33bd0e0dbb2",
+      "source_function_name": "find_pair",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8736111111111111,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate a key in the in-memory key/value store.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for find_pair.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8736111111111111,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate a key in the in-memory key/value store.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    },
+    {
+      "decompiled": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int extraout_EAX;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  bool bVar5;\r\n  uchar local_787;\r\n  ushort local_786;\r\n  int local_784;\r\n  int local_780;\r\n  int local_77c;\r\n  Pair local_778;\r\n  char local_718 [268];\r\n  int local_60c;\r\n  Pair local_608 [16];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  local_60c = 0;\r\n  while( true ) {\r\n    p_Var3 = __acrt_iob_func(0);\r\n    pcVar4 = fgets(local_718,0x100,p_Var3);\r\n    if (pcVar4 == (char *)0x0) break;\r\n    trim(local_718);\r\n    if (((local_718[0] != '\\0') && (local_60c < 0x10)) &&\r\n       (iVar2 = split_pair(local_718,&local_778), iVar2 != 0)) {\r\n      local_60c = local_60c + 1;\r\n      memcpy();\r\n    }\r\n  }\r\n  local_77c = find_pair(local_608,local_60c,\"mode\");\r\n  local_780 = find_pair(local_608,local_60c,\"limit\");\r\n  local_784 = find_pair(local_608,local_60c,\"flags\");\r\n  local_786 = 0;\r\n  local_787 = '\\0';\r\n  if ((-1 < local_77c) && (strcmp(), extraout_EAX != 0)) {\r\n    strcmp();\r\n  }\r\n  bVar1 = false;\r\n  if (-1 < local_780) {\r\n    iVar2 = parse_u16(local_608[local_780].value,&local_786);\r\n    bVar1 = false;\r\n    if ((iVar2 != 0) && (bVar1 = false, 9 < local_786)) {\r\n      bVar1 = local_786 < 100;\r\n    }\r\n  }\r\n  bVar5 = false;\r\n  if (-1 < local_784) {\r\n    iVar2 = parse_hex8(local_608[local_784].value,&local_787);\r\n    bVar5 = iVar2 != 0;\r\n  }\r\n  printf(\"items=%d\\n\");\r\n  printf(\"mode_ok=%d\\n\");\r\n  printf(\"limit_ok=%d\\n\");\r\n  printf(\"flags_ok=%d\\n\");\r\n  if (bVar1) {\r\n    printf(\"limit=%u\\n\");\r\n  }\r\n  if (bVar5) {\r\n    printf(\"flags=%u\\n\");\r\n  }\r\n  printf(\"ready=%d\\n\");\r\n  return 0;\r\n}\r\n\r\n",
+      "original_source": "int main(void) {\n    Pair items[MAX_ITEMS];\n    int count = 0;\n    char line[MAX_LINE];\n\n    while (fgets(line, sizeof line, stdin)) {\n        trim(line);\n        if (line[0] == '\\0') continue;\n        if (count < MAX_ITEMS) {\n            Pair p;\n            if (split_pair(line, &p)) {\n                items[count++] = p;\n            }\n        }\n    }\n\n    int mode_i = find_pair(items, count, \"mode\");\n    int limit_i = find_pair(items, count, \"limit\");\n    int flags_i = find_pair(items, count, \"flags\");\n\n    uint16_t limit = 0;\n    uint8_t flags = 0;\n    int ok_mode = mode_i >= 0 && (strcmp(items[mode_i].value, \"alpha\") == 0 || strcmp(items[mode_i].value, \"beta\") == 0);\n    int ok_limit = limit_i >= 0 && parse_u16(items[limit_i].value, &limit) && limit >= 10 && limit <= 99;\n    int ok_flags = flags_i >= 0 && parse_hex8(items[flags_i].value, &flags);\n\n    printf(\"items=%d\\n\", count);\n    printf(\"mode_ok=%d\\n\", ok_mode);\n    printf(\"limit_ok=%d\\n\", ok_limit);\n    printf(\"flags_ok=%d\\n\", ok_flags);\n    if (ok_limit) printf(\"limit=%u\\n\", (unsigned)limit);\n    if (ok_flags) printf(\"flags=%u\\n\", (unsigned)flags);\n    printf(\"ready=%d\\n\", (ok_mode && ok_limit && ok_flags) ? 1 : 0);\n    return 0;\n}",
+      "project_id": "c_token_config_parser",
+      "sample_id": "d17a76948075b74f",
+      "source_function_name": "main",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int extraout_EAX;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  bool bVar5;\r\n  uchar local_787;\r\n  ushort local_786;\r\n  int local_784;\r\n  int local_780;\r\n  int local_77c;\r\n  Pair local_778;\r\n  char local_718 [268];\r\n  int local_60c;\r\n  Pair local_608 [16];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  local_60c = 0;\r\n  while( true ) {\r\n    p_Var3 = __acrt_iob_func(0);\r\n    pcVar4 = fgets(local_718,0x100,p_Var3);\r\n    if (pcVar4 == (char *)0x0) break;\r\n    trim(local_718);\r\n    if (((local_718[0] != '\\0') && (local_60c < 0x10)) &&\r\n       (iVar2 = split_pair(local_718,&local_778), iVar2 != 0)) {\r\n      local_60c = local_60c + 1;\r\n      memcpy();\r\n    }\r\n  }\r\n  local_77c = find_pair(local_608,local_60c,\"mode\");\r\n  local_780 = find_pair(local_608,local_60c,\"limit\");\r\n  local_784 = find_pair(local_608,local_60c,\"flags\");\r\n  local_786 = 0;\r\n  local_787 = '\\0';\r\n  if ((-1 < local_77c) && (strcmp(), extraout_EAX != 0)) {\r\n    strcmp();\r\n  }\r\n  bVar1 = false;\r\n  if (-1 < local_780) {\r\n    iVar2 = parse_u16(local_608[local_780].value,&local_786);\r\n    bVar1 = false;\r\n    if ((iVar2 != 0) && (bVar1 = false, 9 < local_786)) {\r\n      bVar1 = local_786 < 100;\r\n    }\r\n  }\r\n  bVar5 = false;\r\n  if (-1 < local_784) {\r\n    iVar2 = parse_hex8(local_608[local_784].value,&local_787);\r\n    bVar5 = iVar2 != 0;\r\n  }\r\n  printf(\"items=%d\\n\");\r\n  printf(\"mode_ok=%d\\n\");\r\n  printf(\"limit_ok=%d\\n\");\r\n  printf(\"flags_ok=%d\\n\");\r\n  if (bVar1) {\r\n    printf(\"limit=%u\\n\");\r\n  }\r\n  if (bVar5) {\r\n    printf(\"flags=%u\\n\");\r\n  }\r\n  printf(\"ready=%d\\n\");\r\n  return 0;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.18981481481481483,
+            "readability_score": 0.5053205128205128,
+            "sample_id": "d17a76948075b74f",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "int main(void) {\n    char line[MAX_LINE];\n    Pair pairs[MAX_ITEMS];\n    int count = 0;\n    int mode_ok = 0;\n    int limit_ok = 0;\n    int flags_ok = 0;\n    int valid = 0;\n    int limit = 0;\n    char flags[16];\n    char mode[MAX_ITEMS];\n    char limit[MAX_ITEMS];\n\n    while (fgets(line, sizeof(line), stdin)) {\n        trim(line);\n        if (line[0] == '\\0' || count >= MAX_ITEMS) continue;\n        if (split_pair(line, &pairs[count])) {\n            count++;\n            if (strcmp(pairs[count].key, \"mode\") == 0) mode_ok = 1;\n            if (strcmp(pairs[count].key, \"limit\") == 0) {\n                if (parse_u16(pairs[count].value, &limit)) {\n                    if (limit >= 100) mode_ok = 0;\n                }\n            }\n            if (strcmp(pairs[count].key, \"flags\") == 0) {\n                if (parse_hex8(pairs[count].value, flags)) {\n                    flags_ok = 1;\n                }\n            }\n        }\n    }\n\n    if (mode_ok) printf(\"mode_ok=%d\\n\", mode_ok);\n    if (limit_ok) printf(\"limit_ok=%d\\n\", limit_ok);\n    if (flags_ok) printf(\"flags_ok=%d\\n\", flags_ok);\n    if (valid) printf(\"limit=%u\\n\", limit);\n    if (flags_ok) printf(\"flags=%u\\n\", (unsigned)strlen(flags));\n    printf(\"ready=%d\\n\", valid);\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8676535087719298,
+            "sample_id": "d17a76948075b74f",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Parse a tiny configuration format from stdin, validate a few typed fields, and report normalized status lines.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "int main(void) {\n    int num_items = 0;\n    char line_buffer[256];\n    Pair pairs[16];\n    Pair temp_pair;\n    int mode_index, limit_index, flags_index;\n    unsigned short limit_value = 0;\n    unsigned char flags_value = 0;\n    bool limit_ok = false;\n    bool flags_ok = false;\n\n    while (true) {\n        FILE *stdin_file = __acrt_iob_func(0);\n        char *fgets_result = fgets(line_buffer, 256, stdin_file);\n        if (fgets_result == NULL) {\n            break;\n        }\n        trim(line_buffer);\n        if (line_buffer[0] != '\\0' && num_items < 16) {\n            int result = split_pair(line_buffer, &temp_pair);\n            if (result != 0) {\n                memcpy(&pairs[num_items], &temp_pair, sizeof(Pair));\n                num_items++;\n            }\n        }\n    }\n\n    mode_index = find_pair(pairs, num_items, \"mode\");\n    limit_index = find_pair(pairs, num_items, \"limit\");\n    flags_index = find_pair(pairs, num_items, \"flags\");\n\n    if (mode_index >= 0) {\n        if (strcmp(pairs[mode_index].value, \"expected_mode_string\") == 0) {\n            // mode is valid (details omitted)\n        }\n    }\n\n    if (limit_index >= 0) {\n        int result = parse_u16(pairs[limit_index].value, &limit_value);\n        if (result != 0 && limit_value > 9 && limit_value < 100) {\n            limit_ok = true;\n        }\n    }\n\n    if (flags_index >= 0) {\n        int result = parse_hex8(pairs[flags_index].value, &flags_value);\n        flags_ok = (result != 0);\n    }\n\n    printf(\"items=%d\\n\", num_items);\n    printf(\"mode_ok=%d\\n\", mode_index >= 0 /* && mode valid */);\n    printf(\"limit_ok=%d\\n\", limit_ok);\n    printf(\"flags_ok=%d\\n\", flags_ok);\n\n    if (limit_ok) {\n        printf(\"limit=%u\\n\", limit_value);\n    }\n    if (flags_ok) {\n        printf(\"flags=%u\\n\", flags_value);\n    }\n\n    printf(\"ready=%d\\n\", (mode_index >= 0 /* && mode valid */) && limit_ok && flags_ok);\n\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.863764880952381,
+            "sample_id": "d17a76948075b74f",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "The main function reads up to 16 lines from standard input, each expected to be a key-value pair string. It trims each line, splits it into a Pair structure, and stores it in an array. Then it searches this array for keys \"mode\", \"limit\", and \"flags\". It validates the \"mode\" key by comparing its value to a constant string. It parses \"limit\" as a 16-bit unsigned integer and checks if it is between 10 and 99 inclusive. It parses \"flags\" as an 8-bit hexadecimal value. Finally, it prints the count of items read, validation results for each key, the parsed limit and flags if valid, and a final ready status indicating if all validations passed.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int extraout_EAX;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  bool bVar5;\r\n  uchar local_787;\r\n  ushort local_786;\r\n  int local_784;\r\n  int local_780;\r\n  int local_77c;\r\n  Pair local_778;\r\n  char local_718 [268];\r\n  int local_60c;\r\n  Pair local_608 [16];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  local_60c = 0;\r\n  while( true ) {\r\n    p_Var3 = __acrt_iob_func(0);\r\n    pcVar4 = fgets(local_718,0x100,p_Var3);\r\n    if (pcVar4 == (char *)0x0) break;\r\n    trim(local_718);\r\n    if (((local_718[0] != '\\0') && (local_60c < 0x10)) &&\r\n       (iVar2 = split_pair(local_718,&local_778), iVar2 != 0)) {\r\n      local_60c = local_60c + 1;\r\n      memcpy();\r\n    }\r\n  }\r\n  local_77c = find_pair(local_608,local_60c,\"mode\");\r\n  local_780 = find_pair(local_608,local_60c,\"limit\");\r\n  local_784 = find_pair(local_608,local_60c,\"flags\");\r\n  local_786 = 0;\r\n  local_787 = '\\0';\r\n  if ((-1 < local_77c) && (strcmp(), extraout_EAX != 0)) {\r\n    strcmp();\r\n  }\r\n  bVar1 = false;\r\n  if (-1 < local_780) {\r\n    iVar2 = parse_u16(local_608[local_780].value,&local_786);\r\n    bVar1 = false;\r\n    if ((iVar2 != 0) && (bVar1 = false, 9 < local_786)) {\r\n      bVar1 = local_786 < 100;\r\n    }\r\n  }\r\n  bVar5 = false;\r\n  if (-1 < local_784) {\r\n    iVar2 = parse_hex8(local_608[local_784].value,&local_787);\r\n    bVar5 = iVar2 != 0;\r\n  }\r\n  printf(\"items=%d\\n\");\r\n  printf(\"mode_ok=%d\\n\");\r\n  printf(\"limit_ok=%d\\n\");\r\n  printf(\"flags_ok=%d\\n\");\r\n  if (bVar1) {\r\n    printf(\"limit=%u\\n\");\r\n  }\r\n  if (bVar5) {\r\n    printf(\"flags=%u\\n\");\r\n  }\r\n  printf(\"ready=%d\\n\");\r\n  return 0;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.18981481481481483,
+            "readability_score": 0.5053205128205128,
+            "sample_id": "d17a76948075b74f",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "int main(void) {\n    char line[MAX_LINE];\n    Pair pairs[MAX_ITEMS];\n    int count = 0;\n    int mode_ok = 0;\n    int limit_ok = 0;\n    int flags_ok = 0;\n    int valid = 0;\n    int limit = 0;\n    char *mode = NULL;\n    char *limit = NULL;\n    char *flags = NULL;\n    char *trimmed;\n\n    while (fgets(line, sizeof(line), stdin)) {\n        trimmed = trim(line);\n        if (trimmed[0] == '\\0' || count >= MAX_ITEMS) continue;\n        if (split_pair(trimmed, &pairs[count])) {\n            count++;\n            if (strcmp(pairs[count].key, \"mode\") == 0) mode_ok = 1;\n            if (strcmp(pairs[count].key, \"limit\") == 0) limit_ok = 1;\n            if (strcmp(pairs[count].key, \"flags\") == 0) flags_ok = 1;\n        }\n    }\n\n    if (mode_ok && limit_ok && flags_ok) {\n        int ok = 0;\n        if (limit > 0 && limit < 100) ok = 1;\n        if (parse_u16(pairs[count].value, &limit) && ok) ok = 1;\n        if (parse_hex8(pairs[count].value, &flags) && ok) ok = 1;\n        printf(\"items=%d\\n\", count);\n        printf(\"mode_ok=%d\\n\", mode_ok);\n        printf(\"limit_ok=%d\\n\", limit_ok);\n        printf(\"flags_ok=%d\\n\", flags_ok);\n        if (ok) printf(\"limit=%u\\n\", limit);\n        if (ok) printf(\"flags=%u\\n\", (unsigned)flags);\n        printf(\"ready=%d\\n\", ok);\n        return 0;\n    }\n    return 1;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8658119658119658,
+            "sample_id": "d17a76948075b74f",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Parse a tiny configuration format from stdin, validate a few typed fields, and report normalized status lines.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    }
+  ],
+  "sft_predictions_path": "artifacts\\runs\\eval-sft-checkpoint-20260425-021627\\predictions.jsonl",
+  "split": "val"
+}

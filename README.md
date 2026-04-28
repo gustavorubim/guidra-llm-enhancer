@@ -16,8 +16,31 @@ This repository implements the scaffold and cross-platform core pipeline describ
 Implemented vs validated:
 
 - Phases `0` through `4` are implemented and validated on macOS.
-- Phase `5` SFT is implemented as a guarded Windows CUDA path, but it has not been run end-to-end on this macOS machine.
-- Phase `6` GRPO is implemented as a guarded Windows CUDA path, but it has not been run end-to-end on this macOS machine.
+- Phase `5` SFT is implemented and has been run on the supported Windows CUDA path.
+- Phase `6` GRPO is implemented and has been run on the supported Windows CUDA path.
+
+## Main Results
+
+On the current 105-sample validation comparison, the trained checkpoints materially outperform raw Ghidra output and the untuned base Qwen model. The SFT checkpoint carries most of the gain; the best observed GRPO checkpoint adds a small behavior-success lift while preserving compile, JSON, readability, and naming performance.
+
+Full report artifacts:
+
+- [SFT vs best GRPO summary](artifacts/reports/sft_vs_best_grpo_summary_20260427.md)
+- [Curated sample comparison with source, decompiler output, base model, SFT, and GRPO outputs](artifacts/reports/sample_comparison_report_20260427.md)
+
+| System | Composite | Behavior success | Compile success | Readability | Naming | JSON valid |
+|:---|---:|---:|---:|---:|---:|---:|
+| Raw Ghidra | 0.302 | 0.000 | 0.029 | 0.534 | 0.143 | 1.000 |
+| Original Qwen | 0.087 | 0.000 | 0.029 | 0.534 | 0.000 | 0.000 |
+| Prompt-only cleanup | 0.520 | 0.295 | 0.324 | 0.728 | 0.410 | 1.000 |
+| SFT checkpoint | 0.762 | 0.543 | 0.705 | 0.876 | 0.914 | 1.000 |
+| Best GRPO checkpoint | 0.767 | 0.562 | 0.705 | 0.875 | 0.914 | 1.000 |
+
+Key deltas:
+
+- SFT vs raw Ghidra: `+0.460` composite, `+54.3 pp` behavior, `+67.6 pp` compile.
+- Best GRPO vs raw Ghidra: `+0.466` composite, `+56.2 pp` behavior, `+67.6 pp` compile.
+- Best GRPO vs SFT: `+0.006` composite, from `+1.9 pp` behavior with compile unchanged.
 
 ## Repo Architecture
 

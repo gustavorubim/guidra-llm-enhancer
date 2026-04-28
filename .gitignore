@@ -10,7 +10,12 @@ __pycache__/
 artifacts/checkpoints/
 artifacts/logs/
 artifacts/models/
-artifacts/reports/
+artifacts/reports/*
+!artifacts/reports/
+!artifacts/reports/sft_vs_best_grpo_summary_20260427.md
+!artifacts/reports/sft_vs_best_grpo_summary_20260427.json
+!artifacts/reports/sample_comparison_report_20260427.md
+!artifacts/reports/sample_comparison_report_20260427.json
 artifacts/runs/
 data/cache/
 data/interim/
