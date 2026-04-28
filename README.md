@@ -27,6 +27,9 @@ Full report artifacts:
 
 - [SFT vs best GRPO summary](artifacts/reports/sft_vs_best_grpo_summary_20260427.md)
 - [Curated sample comparison with source, decompiler output, base model, SFT, and GRPO outputs](artifacts/reports/sample_comparison_report_20260427.md)
+- Additional curated samples:
+  [seed 20260428](artifacts/reports/sample_comparison_report_20260428_seed20260428.md),
+  [seed 20260429](artifacts/reports/sample_comparison_report_20260428_seed20260429.md)
 
 | System | Composite | Behavior success | Compile success | Readability | Naming | JSON valid |
 |:---|---:|---:|---:|---:|---:|---:|

@@ -1,0 +1,557 @@
+{
+  "baseline_predictions_path": "artifacts\\runs\\baseline-20260414-144530\\baseline_predictions.jsonl",
+  "dataset_path": "data\\processed\\sft\\function_dataset.jsonl",
+  "generated_at": "2026-04-28T06:38:50-04:00",
+  "grpo_predictions_path": "artifacts\\runs\\eval-grpo-checkpoint-20260425-024529\\predictions.jsonl",
+  "metrics": {
+    "decompiled": {
+      "behavior_success_rate": 0.0,
+      "compile_success_rate": 0.0,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.2,
+      "readability_score": 0.515045560795867
+    },
+    "grpo_model": {
+      "behavior_success_rate": 0.8,
+      "compile_success_rate": 0.8,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.9142857142857143,
+      "readability_score": 0.8775272601794342
+    },
+    "original_model": {
+      "behavior_success_rate": 0.4,
+      "compile_success_rate": 0.4,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.41428571428571426,
+      "readability_score": 0.6619306958473625
+    },
+    "qwen_via_prompt": {
+      "behavior_success_rate": 0.0,
+      "compile_success_rate": 0.0,
+      "field_complete_rate": 0.0,
+      "json_valid_rate": 0.0,
+      "naming_score": 0.0,
+      "readability_score": 0.515045560795867
+    },
+    "sft_model": {
+      "behavior_success_rate": 0.8,
+      "compile_success_rate": 0.8,
+      "field_complete_rate": 1.0,
+      "json_valid_rate": 1.0,
+      "naming_score": 0.9142857142857143,
+      "readability_score": 0.8781537698412698
+    }
+  },
+  "original_system": "prompt_only_cleanup",
+  "qwen_system": "base_qwen_openrouter",
+  "random_seed": 20260428,
+  "run_id": "sample-comparison-report-20260428-063846",
+  "sample_count": 5,
+  "samples": [
+    {
+      "decompiled": "\r\nint __cdecl count_csv_items(char *param_1)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int local_c;\r\n  byte *local_8;\r\n  \r\n  local_c = 0;\r\n  bVar1 = false;\r\n  for (local_8 = (byte *)param_1; *local_8 != 0; local_8 = local_8 + 1) {\r\n    if (*local_8 == 0x2c) {\r\n      if (bVar1) {\r\n        local_c = local_c + 1;\r\n      }\r\n      bVar1 = false;\r\n    }\r\n    else {\r\n      iVar2 = isspace((uint)*local_8);\r\n      if (iVar2 == 0) {\r\n        bVar1 = true;\r\n      }\r\n    }\r\n  }\r\n  if (bVar1) {\r\n    local_c = local_c + 1;\r\n  }\r\n  return local_c;\r\n}\r\n\r\n",
+      "original_source": "static int count_csv_items(const char *s) {\n    int items = 0;\n    int in_token = 0;\n    for (; *s; s++) {\n        if (*s == ',') {\n            if (in_token) items++;\n            in_token = 0;\n        } else if (!isspace((unsigned char)*s)) {\n            in_token = 1;\n        }\n    }\n    if (in_token) items++;\n    return items;\n}",
+      "project_id": "cfg_token_pipeline_001_v1",
+      "sample_id": "f30d306d8716c96f",
+      "source_function_name": "count_csv_items",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl count_csv_items(char *param_1)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int local_c;\r\n  byte *local_8;\r\n  \r\n  local_c = 0;\r\n  bVar1 = false;\r\n  for (local_8 = (byte *)param_1; *local_8 != 0; local_8 = local_8 + 1) {\r\n    if (*local_8 == 0x2c) {\r\n      if (bVar1) {\r\n        local_c = local_c + 1;\r\n      }\r\n      bVar1 = false;\r\n    }\r\n    else {\r\n      iVar2 = isspace((uint)*local_8);\r\n      if (iVar2 == 0) {\r\n        bVar1 = true;\r\n      }\r\n    }\r\n  }\r\n  if (bVar1) {\r\n    local_c = local_c + 1;\r\n  }\r\n  return local_c;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5265432098765431,
+            "sample_id": "f30d306d8716c96f",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int count_csv_items(const char *s) {\n    int count = 0;\n    int in_item = 0;\n    for (; *s; ++s) {\n        if (*s == ',') {\n            if (in_item) count++;\n            in_item = 0;\n        } else if (!isspace((unsigned char)*s)) {\n            in_item = 1;\n        }\n    }\n    if (in_item) count++;\n    return count;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.9068452380952381,
+            "sample_id": "f30d306d8716c96f",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Count comma-separated nonempty items in a value string.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl count_csv_items(char *param_1)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int local_c;\r\n  byte *local_8;\r\n  \r\n  local_c = 0;\r\n  bVar1 = false;\r\n  for (local_8 = (byte *)param_1; *local_8 != 0; local_8 = local_8 + 1) {\r\n    if (*local_8 == 0x2c) {\r\n      if (bVar1) {\r\n        local_c = local_c + 1;\r\n      }\r\n      bVar1 = false;\r\n    }\r\n    else {\r\n      iVar2 = isspace((uint)*local_8);\r\n      if (iVar2 == 0) {\r\n        bVar1 = true;\r\n      }\r\n    }\r\n  }\r\n  if (bVar1) {\r\n    local_c = local_c + 1;\r\n  }\r\n  return local_c;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5265432098765431,
+            "sample_id": "f30d306d8716c96f",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for count_csv_items.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl count_csv_items(char *param_1)\r\n\r\n{\r\n  bool bVar1;\r\n  int iVar2;\r\n  int local_c;\r\n  byte *local_8;\r\n  \r\n  local_c = 0;\r\n  bVar1 = false;\r\n  for (local_8 = (byte *)param_1; *local_8 != 0; local_8 = local_8 + 1) {\r\n    if (*local_8 == 0x2c) {\r\n      if (bVar1) {\r\n        local_c = local_c + 1;\r\n      }\r\n      bVar1 = false;\r\n    }\r\n    else {\r\n      iVar2 = isspace((uint)*local_8);\r\n      if (iVar2 == 0) {\r\n        bVar1 = true;\r\n      }\r\n    }\r\n  }\r\n  if (bVar1) {\r\n    local_c = local_c + 1;\r\n  }\r\n  return local_c;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5265432098765431,
+            "sample_id": "f30d306d8716c96f",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int count_csv_items(const char *s) {\n    int count = 0;\n    int in_item = 0;\n    for (; *s; ++s) {\n        if (*s == ',') {\n            if (in_item) count++;\n            in_item = 0;\n        } else if (!isspace((unsigned char)*s)) {\n            in_item = 1;\n        }\n    }\n    if (in_item) count++;\n    return count;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.9068452380952381,
+            "sample_id": "f30d306d8716c96f",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Count comma-separated nonempty items in a value string.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    },
+    {
+      "decompiled": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  int iVar1;\r\n  _iobuf *p_Var2;\r\n  char *pcVar3;\r\n  char local_858 [1032];\r\n  Store local_450;\r\n  char local_208 [516];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  p_Var2 = __acrt_iob_func(0);\r\n  pcVar3 = fgets(local_208,0x200,p_Var2);\r\n  if (pcVar3 != (char *)0x0) {\r\n    memset();\r\n    iVar1 = split_tokens(local_208,(char (*) [32])local_858);\r\n    if (iVar1 < 0) {\r\n      puts(\"error=too_many_tokens\");\r\n    }\r\n    else if (iVar1 == 0) {\r\n      puts(\"count=0\");\r\n    }\r\n    else {\r\n      iVar1 = handle_command(&local_450,(char (*) [32])local_858,iVar1);\r\n      if (iVar1 == 0) {\r\n        puts(\"error=invalid_input\");\r\n      }\r\n      else {\r\n        print_store(&local_450);\r\n      }\r\n    }\r\n  }\r\n  return 0;\r\n}\r\n\r\n",
+      "original_source": "int main(void) {\n    char input[512];\n    if (!fgets(input, sizeof input, stdin)) return 0;\n    Store st = {0};\n    char tokens[MAX_TOKENS][MAX_TOKEN_LEN];\n    int ntok = split_tokens(input, tokens);\n    if (ntok < 0) {\n        puts(\"error=too_many_tokens\");\n        return 0;\n    }\n    if (ntok == 0) {\n        puts(\"count=0\");\n        return 0;\n    }\n    if (!handle_command(&st, tokens, ntok)) {\n        puts(\"error=invalid_input\");\n        return 0;\n    }\n    print_store(&st);\n    return 0;\n}",
+      "project_id": "cfg_token_router_001",
+      "sample_id": "cac92e65b7346e34",
+      "source_function_name": "main",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  int iVar1;\r\n  _iobuf *p_Var2;\r\n  char *pcVar3;\r\n  char local_858 [1032];\r\n  Store local_450;\r\n  char local_208 [516];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  p_Var2 = __acrt_iob_func(0);\r\n  pcVar3 = fgets(local_208,0x200,p_Var2);\r\n  if (pcVar3 != (char *)0x0) {\r\n    memset();\r\n    iVar1 = split_tokens(local_208,(char (*) [32])local_858);\r\n    if (iVar1 < 0) {\r\n      puts(\"error=too_many_tokens\");\r\n    }\r\n    else if (iVar1 == 0) {\r\n      puts(\"count=0\");\r\n    }\r\n    else {\r\n      iVar1 = handle_command(&local_450,(char (*) [32])local_858,iVar1);\r\n      if (iVar1 == 0) {\r\n        puts(\"error=invalid_input\");\r\n      }\r\n      else {\r\n        print_store(&local_450);\r\n      }\r\n    }\r\n  }\r\n  return 0;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.14705882352941177,
+            "readability_score": 0.5147727272727273,
+            "sample_id": "cac92e65b7346e34",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "int main(void) {\n    char line[MAX_LINE];\n    char *tokens[MAX_TOKENS];\n    int count;\n    int result;\n\n    if (fgets(line, sizeof(line), stdin)) {\n        memset(tokens, 0, sizeof(tokens) * MAX_TOKENS);\n        count = split_tokens(line, tokens, MAX_TOKENS);\n        if (count < 0) {\n            puts(\"error=too_many_tokens\");\n        } else if (count == 0) {\n            puts(\"count=0\");\n        } else {\n            result = handle_command(tokens, count, line);\n            if (result == 0) {\n                puts(\"error=invalid_input\");\n            } else {\n                print_store(&result);\n            }\n        }\n    }\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8873188405797101,
+            "sample_id": "cac92e65b7346e34",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Read stdin, parse the line, execute the command, and print the final result.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  int iVar1;\r\n  _iobuf *p_Var2;\r\n  char *pcVar3;\r\n  char local_858 [1032];\r\n  Store local_450;\r\n  char local_208 [516];\r\n  int local_4;\r\n  \r\n  local_4 = 0;\r\n  p_Var2 = __acrt_iob_func(0);\r\n  pcVar3 = fgets(local_208,0x200,p_Var2);\r\n  if (pcVar3 != (char *)0x0) {\r\n    memset();\r\n    iVar1 = split_tokens(local_208,(char (*) [32])local_858);\r\n    if (iVar1 < 0) {\r\n      puts(\"error=too_many_tokens\");\r\n    }\r\n    else if (iVar1 == 0) {\r\n      puts(\"count=0\");\r\n    }\r\n    else {\r\n      iVar1 = handle_command(&local_450,(char (*) [32])local_858,iVar1);\r\n      if (iVar1 == 0) {\r\n        puts(\"error=invalid_input\");\r\n      }\r\n      else {\r\n        print_store(&local_450);\r\n      }\r\n    }\r\n  }\r\n  return 0;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.14705882352941177,
+            "readability_score": 0.5156565656565656,
+            "sample_id": "cac92e65b7346e34",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for main.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl main(void)\r\n\r\n{\r\n  int iVar1;\r\n  _iobuf *p_Var2;\r\n  char *pcVar3;\r\n  char local_858 [1032];\r\n  Store local_450;\r\n  char local_208 [516];\r\n  undefined4 local_4;\r\n  \r\n  local_4 = 0;\r\n  p_Var2 = __acrt_iob_func(0);\r\n  pcVar3 = fgets(local_208,0x200,p_Var2);\r\n  if (pcVar3 != (char *)0x0) {\r\n    memset();\r\n    iVar1 = split_tokens(local_208,(char (*) [32])local_858);\r\n    if (iVar1 < 0) {\r\n      puts(\"error=too_many_tokens\");\r\n    }\r\n    else if (iVar1 == 0) {\r\n      puts(\"count=0\");\r\n    }\r\n    else {\r\n      iVar1 = handle_command(&local_450,(char (*) [32])local_858,iVar1);\r\n      if (iVar1 == 0) {\r\n        puts(\"error=invalid_input\");\r\n      }\r\n      else {\r\n        print_store(&local_450);\r\n      }\r\n    }\r\n  }\r\n  return 0;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.14705882352941177,
+            "readability_score": 0.5147727272727273,
+            "sample_id": "cac92e65b7346e34",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "int main(void) {\n    char line[MAX_LINE];\n    char *tokens[MAX_TOKENS];\n    int count;\n    int result;\n    char *out;\n    \n    if (fgets(line, sizeof(line), stdin)) {\n        memset(tokens, 0, sizeof(tokens) * MAX_TOKENS);\n        count = split_tokens(line, tokens, MAX_TOKENS);\n        if (count < 0) {\n            puts(\"error=too_many_tokens\");\n        } else if (count == 0) {\n            puts(\"count=0\");\n        } else {\n            result = handle_command(tokens, count, out);\n            if (result == 0) {\n                puts(\"error=invalid_input\");\n            } else {\n                print_store(out);\n            }\n        }\n    }\n    return 0;\n}",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8904513888888889,
+            "sample_id": "cac92e65b7346e34",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Read stdin, parse the line, execute the command, and print the final result.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "full_clarify"
+    },
+    {
+      "decompiled": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+      "original_source": "static void trim_inplace(char *s) {\n    size_t len = strlen(s);\n    size_t start = 0;\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+      "project_id": "c11_text_flags_parser_001",
+      "sample_id": "97c9bce6f13990fc",
+      "source_function_name": "trim_inplace",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19626168224299065,
+            "readability_score": 0.5162990196078431,
+            "sample_id": "97c9bce6f13990fc",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static void trim_inplace(char *s) {\n    size_t start = 0;\n    size_t len = strlen(s);\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.84375,
+            "sample_id": "97c9bce6f13990fc",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Remove leading and trailing whitespace from a mutable string buffer.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "void trim_inplace(char *str) {\n    size_t start = 0;\n    size_t end = strlen(str);\n\n    // Skip leading whitespace\n    while (start < end && isspace((unsigned char)str[start])) {\n        start++;\n    }\n\n    // Skip trailing whitespace\n    while (start < end && isspace((unsigned char)str[end - 1])) {\n        end--;\n    }\n\n    // Shift the trimmed string to the front if needed\n    if (start > 0) {\n        memcpy(str, str + start, end - start);\n    }\n\n    // Null terminate the trimmed string\n    str[end - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.5,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8835648148148149,
+            "sample_id": "97c9bce6f13990fc",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "This function removes leading and trailing whitespace characters from a mutable C string in place.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nvoid __cdecl trim_inplace(char *param_1)\r\n\r\n{\r\n  int iVar1;\r\n  ulonglong extraout_RAX;\r\n  bool bVar2;\r\n  ulonglong local_18;\r\n  ulonglong local_10;\r\n  \r\n  strlen();\r\n  local_18 = 0;\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < extraout_RAX) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_18]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    local_10 = extraout_RAX;\r\n    if (!bVar2) break;\r\n    local_18 = local_18 + 1;\r\n  }\r\n  while( true ) {\r\n    bVar2 = false;\r\n    if (local_18 < local_10) {\r\n      iVar1 = isspace((uint)(byte)param_1[local_10 - 1]);\r\n      bVar2 = iVar1 != 0;\r\n    }\r\n    if (!bVar2) break;\r\n    local_10 = local_10 - 1;\r\n  }\r\n  if (local_18 != 0) {\r\n    memcpy();\r\n  }\r\n  param_1[local_10 - local_18] = '\\0';\r\n  return;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.19626168224299065,
+            "readability_score": 0.5162990196078431,
+            "sample_id": "97c9bce6f13990fc",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static void trim_inplace(char *s) {\n    size_t start = 0;\n    size_t len = strlen(s);\n    while (start < len && isspace((unsigned char)s[start])) start++;\n    while (len > start && isspace((unsigned char)s[len - 1])) len--;\n    if (start > 0) memmove(s, s + start, len - start);\n    s[len - start] = '\\0';\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.84375,
+            "sample_id": "97c9bce6f13990fc",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Remove leading and trailing whitespace from a mutable string buffer.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    },
+    {
+      "decompiled": "\r\nint __cdecl load_entries(Entry *param_1,int param_2)\r\n\r\n{\r\n  int iVar1;\r\n  uint uVar2;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  int local_11c;\r\n  char local_118 [264];\r\n  Entry *local_10;\r\n  int local_4;\r\n  \r\n  local_11c = 0;\r\n  local_10 = param_1;\r\n  local_4 = param_2;\r\n  while( true ) {\r\n    do {\r\n      p_Var3 = __acrt_iob_func(0);\r\n      pcVar4 = fgets(local_118,0x100,p_Var3);\r\n      if (pcVar4 == (char *)0x0) {\r\n        return local_11c;\r\n      }\r\n      trim_inplace(local_118);\r\n    } while ((local_118[0] == '\\0') || (local_118[0] == '#'));\r\n    if (local_4 <= local_11c) break;\r\n    iVar1 = parse_line(local_118,local_10[local_11c].key,local_10[local_11c].value);\r\n    if (iVar1 != 0) {\r\n      uVar2 = classify_value(local_10[local_11c].value);\r\n      local_10[local_11c].flags = uVar2;\r\n      local_11c = local_11c + 1;\r\n    }\r\n  }\r\n  return local_11c;\r\n}\r\n\r\n",
+      "original_source": "static int load_entries(Entry *entries, int cap) {\n    char line[MAX_LINE];\n    int count = 0;\n    while (fgets(line, sizeof(line), stdin)) {\n        trim_inplace(line);\n        if (line[0] == '\\0' || line[0] == '#') continue;\n        if (count >= cap) break;\n        if (!parse_line(line, entries[count].key, entries[count].value)) continue;\n        entries[count].flags = classify_value(entries[count].value);\n        count++;\n    }\n    return count;\n}",
+      "project_id": "c11_text_config_parser_001_v2",
+      "sample_id": "4ca167b49b3fce67",
+      "source_function_name": "load_entries",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl load_entries(Entry *param_1,int param_2)\r\n\r\n{\r\n  int iVar1;\r\n  uint uVar2;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  int local_11c;\r\n  char local_118 [264];\r\n  Entry *local_10;\r\n  int local_4;\r\n  \r\n  local_11c = 0;\r\n  local_10 = param_1;\r\n  local_4 = param_2;\r\n  while( true ) {\r\n    do {\r\n      p_Var3 = __acrt_iob_func(0);\r\n      pcVar4 = fgets(local_118,0x100,p_Var3);\r\n      if (pcVar4 == (char *)0x0) {\r\n        return local_11c;\r\n      }\r\n      trim_inplace(local_118);\r\n    } while ((local_118[0] == '\\0') || (local_118[0] == '#'));\r\n    if (local_4 <= local_11c) break;\r\n    iVar1 = parse_line(local_118,local_10[local_11c].key,local_10[local_11c].value);\r\n    if (iVar1 != 0) {\r\n      uVar2 = classify_value(local_10[local_11c].value);\r\n      local_10[local_11c].flags = uVar2;\r\n      local_11c = local_11c + 1;\r\n    }\r\n  }\r\n  return local_11c;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.2692307692307692,
+            "readability_score": 0.4962239583333333,
+            "sample_id": "4ca167b49b3fce67",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int load_entries(Entry *entries, int max_entries) {\n    char line[MAX_LINE];\n    int count = 0;\n    while (fgets(line, sizeof(line), stdin)) {\n        trim_inplace(line);\n        if (line[0] == '\\0' || line[0] == '#') continue;\n        if (count >= max_entries) continue;\n        Entry e;\n        if (parse_line(line, e.key, e.value)) {\n            e.flags = classify_value(e.value);\n            entries[count++] = e;\n        }\n    }\n    return count;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.5714285714285714,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8761111111111111,
+            "sample_id": "4ca167b49b3fce67",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Read stdin, skip blank/comment lines, parse valid entries, and collect them into an array.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "int load_entries(Entry *entries, int max_entries) {\n    int loaded_count = 0;\n    char line_buffer[264];\n\n    while (1) {\n        FILE *stdin_file;\n        char *read_result;\n        int parse_result;\n        unsigned int flags;\n\n        do {\n            stdin_file = __acrt_iob_func(0); // get stdin\n            read_result = fgets(line_buffer, 256, stdin_file);\n            if (read_result == NULL) {\n                return loaded_count;\n            }\n            trim_inplace(line_buffer);\n        } while (line_buffer[0] == '\\0' || line_buffer[0] == '#');\n\n        if (loaded_count >= max_entries) {\n            break;\n        }\n\n        parse_result = parse_line(line_buffer, entries[loaded_count].key, entries[loaded_count].value);\n        if (parse_result != 0) {\n            flags = classify_value(entries[loaded_count].value);\n            entries[loaded_count].flags = flags;\n            loaded_count++;\n        }\n    }\n\n    return loaded_count;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.5714285714285714,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8625,
+            "sample_id": "4ca167b49b3fce67",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "This function reads lines from standard input, skipping empty lines and lines starting with '#'. For each valid line, it parses the line into key and value fields of an Entry struct, classifies the value to set flags, and stores the Entry in an array until the maximum number of entries is reached or EOF occurs. It returns the number of successfully loaded entries.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl load_entries(Entry *param_1,int param_2)\r\n\r\n{\r\n  int iVar1;\r\n  uint uVar2;\r\n  _iobuf *p_Var3;\r\n  char *pcVar4;\r\n  int local_11c;\r\n  char local_118 [264];\r\n  Entry *local_10;\r\n  int local_4;\r\n  \r\n  local_11c = 0;\r\n  local_10 = param_1;\r\n  local_4 = param_2;\r\n  while( true ) {\r\n    do {\r\n      p_Var3 = __acrt_iob_func(0);\r\n      pcVar4 = fgets(local_118,0x100,p_Var3);\r\n      if (pcVar4 == (char *)0x0) {\r\n        return local_11c;\r\n      }\r\n      trim_inplace(local_118);\r\n    } while ((local_118[0] == '\\0') || (local_118[0] == '#'));\r\n    if (local_4 <= local_11c) break;\r\n    iVar1 = parse_line(local_118,local_10[local_11c].key,local_10[local_11c].value);\r\n    if (iVar1 != 0) {\r\n      uVar2 = classify_value(local_10[local_11c].value);\r\n      local_10[local_11c].flags = uVar2;\r\n      local_11c = local_11c + 1;\r\n    }\r\n  }\r\n  return local_11c;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.2692307692307692,
+            "readability_score": 0.4962239583333333,
+            "sample_id": "4ca167b49b3fce67",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int load_entries(Entry *entries, int max_entries) {\n    char line[MAX_LINE];\n    int count = 0;\n    while (fgets(line, sizeof(line), stdin)) {\n        trim_inplace(line);\n        if (line[0] == '\\0' || line[0] == '#') continue;\n        if (count >= max_entries) continue;\n        Entry e;\n        if (parse_line(line, e.key, e.value)) {\n            e.flags = classify_value(e.value);\n            entries[count++] = e;\n        }\n    }\n    return count;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.5714285714285714,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8761111111111111,
+            "sample_id": "4ca167b49b3fce67",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Read stdin, skip blank/comment lines, parse valid entries, and collect them into an array.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    },
+    {
+      "decompiled": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+      "original_source": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+      "project_id": "cfg_token_router_001",
+      "sample_id": "3355a33bd0e0dbb2",
+      "source_function_name": "find_pair",
+      "systems": {
+        "decompiled": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "raw_ghidra"
+          },
+          "json_valid": true,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "raw_ghidra"
+        },
+        "grpo_model": {
+          "cleaned_c": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8736111111111111,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "grpo_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate a key in the in-memory key/value store.",
+          "system": "grpo_checkpoint"
+        },
+        "original_model": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "prompt_only_cleanup"
+          },
+          "json_valid": true,
+          "summary": "Prompt-free heuristic cleanup for find_pair.",
+          "system": "prompt_only_cleanup"
+        },
+        "qwen_via_prompt": {
+          "cleaned_c": "\r\nint __cdecl find_pair(Store *param_1,char *param_2)\r\n\r\n{\r\n  int extraout_EAX;\r\n  ulonglong local_20;\r\n  \r\n  local_20 = 0;\r\n  while( true ) {\r\n    if (param_1->count <= local_20) {\r\n      return -1;\r\n    }\r\n    strcmp();\r\n    if (extraout_EAX == 0) break;\r\n    local_20 = local_20 + 1;\r\n  }\r\n  return (int)local_20;\r\n}\r\n\r\n",
+          "evaluation": {
+            "behavior_success": false,
+            "compile_success": false,
+            "field_complete": false,
+            "json_valid": false,
+            "naming_score": 0.0,
+            "notes": [],
+            "placeholder_ratio": 0.16666666666666666,
+            "readability_score": 0.5213888888888889,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "base_qwen_openrouter"
+          },
+          "json_valid": false,
+          "summary": "Raw Ghidra decompiler output without clarification.",
+          "system": "base_qwen_openrouter"
+        },
+        "sft_model": {
+          "cleaned_c": "static int find_pair(const Store *st, const char *key) {\n    for (size_t i = 0; i < st->count; i++) {\n        if (strcmp(st->items[i].key, key) == 0) return (int)i;\n    }\n    return -1;\n}",
+          "evaluation": {
+            "behavior_success": true,
+            "compile_success": true,
+            "field_complete": true,
+            "json_valid": true,
+            "naming_score": 1.0,
+            "notes": [],
+            "placeholder_ratio": 0.0,
+            "readability_score": 0.8736111111111111,
+            "sample_id": "3355a33bd0e0dbb2",
+            "system": "sft_checkpoint"
+          },
+          "json_valid": true,
+          "summary": "Locate a key in the in-memory key/value store.",
+          "system": "sft_checkpoint"
+        }
+      },
+      "task_type": "rename"
+    }
+  ],
+  "sft_predictions_path": "artifacts\\runs\\eval-sft-checkpoint-20260425-021627\\predictions.jsonl",
+  "split": "val"
+}

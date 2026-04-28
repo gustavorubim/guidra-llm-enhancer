@@ -16,6 +16,10 @@ artifacts/reports/*
 !artifacts/reports/sft_vs_best_grpo_summary_20260427.json
 !artifacts/reports/sample_comparison_report_20260427.md
 !artifacts/reports/sample_comparison_report_20260427.json
+!artifacts/reports/sample_comparison_report_20260428_seed20260428.md
+!artifacts/reports/sample_comparison_report_20260428_seed20260428.json
+!artifacts/reports/sample_comparison_report_20260428_seed20260429.md
+!artifacts/reports/sample_comparison_report_20260428_seed20260429.json
 artifacts/runs/
 data/cache/
 data/interim/
